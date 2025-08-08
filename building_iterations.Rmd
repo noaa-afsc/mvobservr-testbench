@@ -1,0 +1,34 @@
+---
+title: "building iterations"
+output: html_notebook
+---
+
+The goal is to set up a simple looping function to take in data, pass it through the mvobs package, and then return the most important results in a dataframe. 
+
+
+```{r setup}
+library(dplyr)
+library(FMAtools)  
+source("mvglm_obs_dd.R")
+```
+
+```{r dataprep}
+#results in a list split by stratum
+load("source_data/1_mvglm_obs_data_segmented.Rdata") #original data
+
+model_start <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
+                       select(STRATA, Species) %>% distinct()) %>%
+  select(species = Species, uid = TRIP_ID, days.fished, observed = OBSERVED_FLAG, biomass = Biomass, BLOCK, days.fished)
+
+model_start.l <- split(model_start, f = ~ STRATA)
+
+spp_top_n <- model_start.l$`OB FIXED BSAI` %>%
+  group_by(species) %>%
+  summarize(b=sum(biomass)) %>%
+  arrange(desc(b)) %>%
+  slice_max(n=3, order_by=b)
+
+#extract a single stratum and reduce the number of species
+x <- model_start.l$`OB FIXED BSAI` %>%
+  filter(species %in% spp_top_n$species)  
+```
