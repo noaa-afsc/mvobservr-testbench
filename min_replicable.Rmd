@@ -18,15 +18,20 @@ library(FMAtools)
 load("source_data/1_mvglm_obs_data_segmented.Rdata") #original data
 
 model_start <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
-                       select(STRATA, Species) %>% distinct())
+                       select(STRATA, Species) %>% distinct()) %>%
+  select(species = Species, uid = TRIP_ID, days.fished, observed = OBSERVED_FLAG, biomass = Biomass, BLOCK, days.fished)
 
 model_start.l <- split(model_start, f = ~ STRATA)
 
+spp_top_n <- model_start.l$`OB FIXED BSAI` %>%
+  group_by(species) %>%
+  summarize(b=sum(biomass)) %>%
+  arrange(desc(b)) %>%
+  slice_max(n=3, order_by=b)
 
 #extract a single stratum and reduce the number of species
 x <- model_start.l$`OB FIXED BSAI` %>%
-  filter(Species %in% c('Pacific Cod','Pacific Halibut','Octopus')) %>%
-  select(species = Species, uid = TRIP_ID, days.fished, observed = OBSERVED_FLAG, biomass = Biomass, BLOCK, days.fished) 
+  filter(species %in% spp_top_n$species)  
 ```
 
 #run original package code (for comparison)
@@ -118,8 +123,16 @@ mvglm_obs_dd <- function(profile_dat, n_permutations, xi.vec = seq(1.2, 1.8, len
 
 ```{r}
 set.seed(123)
-system.time(out_dd <- mvglm_obs_dd(x, n_permutations=10))
-out_dd
+system.time(out_dd <- mvglm_obs_dd(x, n_permutations=100))
+out_dd #65s for 100, p = 0.099
+
+system.time(out_dd2 <- mvglm_obs(x, 
+                          add_var = "days.fished",
+                          block = "BLOCK",
+                          n_permutations = 100,
+                          xi.vec = seq(1.2, 1.8, length.out=5)
+                          )) 
+out_dd2$results #83s for 100, p = 0.168 (halibut different)
 ```
 first run (unchanged code, 2 permutations, OB FIXED BSAI, pac cod, pac hal, octopus)
   24s
