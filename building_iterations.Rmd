@@ -6,29 +6,111 @@ output: html_notebook
 The goal is to set up a simple looping function to take in data, pass it through the mvobs package, and then return the most important results in a dataframe. 
 
 
+decided to use 100 permutations based on the results in min_replicable.Rmd. 
+also going to start with 3 species for building, can be expanded later.
+
 ```{r setup}
-library(dplyr)
+library(tidyverse)
 library(FMAtools)  
-source("mvglm_obs_dd.R")
+library(mvobservr)
+source("functions/mvglm_obs_dd.R")
 ```
 
 ```{r dataprep}
 #results in a list split by stratum
 load("source_data/1_mvglm_obs_data_segmented.Rdata") #original data
 
-model_start <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
+ob.fx.b <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
                        select(STRATA, Species) %>% distinct()) %>%
+  filter(STRATA == "OB FIXED BSAI") %>%
   select(species = Species, uid = TRIP_ID, days.fished, observed = OBSERVED_FLAG, biomass = Biomass, BLOCK, days.fished)
 
-model_start.l <- split(model_start, f = ~ STRATA)
-
-spp_top_n <- model_start.l$`OB FIXED BSAI` %>%
+spp_top_n <- ob.fx.b %>%
   group_by(species) %>%
   summarize(b=sum(biomass)) %>%
   arrange(desc(b)) %>%
   slice_max(n=3, order_by=b)
 
 #extract a single stratum and reduce the number of species
-x <- model_start.l$`OB FIXED BSAI` %>%
+xdat <- ob.fx.b %>%
   filter(species %in% spp_top_n$species)  
+
 ```
+
+
+
+pivot data to wide format to select trips, set all to unobserved
+```{r}
+pdat <- xdat %>%
+  pivot_wider(names_from = species, values_from = biomass) %>%
+  mutate(observed = 'N') 
+```
+
+
+
+#test 1 - resampling observed trips randomly
+
+create a function for looping
+```{r}
+loop_mvglm <- function(dat, covrate, nperm){
+  dat %>% 
+    mutate(observed = ifelse(runif(nrow(.)) <= covrate, 'Y', 'N')) %>%
+    pivot_longer(cols=-c(uid, days.fished, observed, BLOCK),
+                 names_to = 'species', values_to = 'biomass') %>%
+    mvglm_obs_dd(n_permutations=nperm) %>%
+    as.data.frame() #get p and uni.p's on one row per iteration
+}
+```
+
+
+set up simple loop and capture output from each rep
+```{r, warning=FALSE, message=FALSE}
+nperm = 100 #about 1 minute for 100 permutations for 3 species
+covrate = 0.25
+nrep = 100
+
+system.time(res <- map(1:nrep, ~loop_mvglm(pdat, covrate, nperm)))
+res1 <- res
+res <- res %>%
+  add_row(res1)
+
+res_df <- list_rbind(res)
+```
+
+
+
+```{r}
+res_df %>%
+  mutate(idx = 1:nrow(.)) %>%
+  pivot_longer(cols=-idx) %>%
+  ggplot(aes(x=name, y=value, col=name)) +
+  geom_jitter() +
+  geom_hline(yintercept = 0.05, linetype='dashed') +
+  theme_bw() +
+  guides(col="none") +
+  labs(title = "distribution of results from 100 iterations of randomly selected trips",
+       subtitle="lot of variation between iterations, as expected")
+
+res_df %>%
+  mutate(idx = 1:nrow(.)) %>%
+  pivot_longer(cols=-idx) %>%
+  group_by(name) %>%
+  summarize(mean(value < 0.05))
+```
+include species sum expanded from gtable
+  prevalence matters
+  small changes to common species vs. large changes to rare species
+  high, medium, and low species?
+
+
+
+
+
+
+
+
+
+
+
+
+
