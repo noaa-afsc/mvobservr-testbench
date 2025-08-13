@@ -3,10 +3,12 @@ mvglm_obs_dd <- function(dat, n_permutations, xi.vec = seq(1.2, 1.8, length.out=
   # Specify the model formula here
   model_call <- "biomass ~ species + observed + BLOCK+days.fished"
   
+  #**does the interaction ftest flip between iterations?
+  
   ## Determine proper family and link: -------
   t_profile <- tweedie::tweedie.profile(as.formula(model_call), #Formula from fit2 below using cpglm
                                         data = dat, 
-                                        #xi.vec = xi.vec,
+                                        xi.vec = xi.vec,
                                         do.plot = FALSE, verbose = FALSE, method = "series",
                                         do.ci=FALSE, do.smooth = TRUE, fit.glm = FALSE,
                                         control = list(maxit = 1000, epsilon = 1e-8)) 
