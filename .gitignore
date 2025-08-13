@@ -1,2 +1,3 @@
 *.html
 /source_data
+.Rhistory
