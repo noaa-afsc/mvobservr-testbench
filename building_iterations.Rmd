@@ -70,11 +70,10 @@ covrate = 0.25
 nrep = 100
 
 system.time(res <- map(1:nrep, ~loop_mvglm(pdat, covrate, nperm)))
-res1 <- res
-res <- res %>%
-  add_row(res1)
 
-res_df <- list_rbind(res)
+res_df <- list_rbind(res) 
+
+save(res_df, file="output_data/obbsai3spp100rep100permcov25_20250813.Rdat")
 ```
 
 
@@ -102,13 +101,43 @@ include species sum expanded from gtable
   small changes to common species vs. large changes to rare species
   high, medium, and low species?
 
+species sum extrapolated - what is their contribution to the stratum? 
+  % occurrence
+  % of total biomass in the stratum
 
 
 
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
+nperm = 100 #about 1 minute for 100 permutations for 3 species
+nrep = 100
+covrates = seq(0.05, 0.95, by=0.1)
+
+res_cov <- map(rep(covrates, each=nrep), ~{
+    loop_mvglm(pdat, .x, nperm) %>%
+    mutate(covrate = .x)
+  })
+
+res_cov_df <- list_rbind(res_cov) 
+
+save(res_cov_df, file="output_data/obbsai3spp100rep100permcovramp_20250813.Rdat")
+```
 
 
-
-
+```{r}
+load("output_data/obbsai3spp100rep100permcovramp_20250813.Rdat")
+res_cov_df %>%
+  mutate(idx = 1:nrow(.)) %>%
+  pivot_longer(cols=-c(idx, covrate)) %>%
+  group_by(name, covrate) %>%
+  summarize(falsepos = mean(value < 0.05), .groups="drop") %>%
+  ggplot(aes(x=covrate, y=falsepos, col=name)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.05, linetype='dashed') +
+  theme_bw() +
+  labs(title = 'OB FIXED BSAI', subtitle = '100 iterations, random trip sampling',
+       x='coverage rate', y='false positive rate (p < 0.05)')
+```
 
 
 
