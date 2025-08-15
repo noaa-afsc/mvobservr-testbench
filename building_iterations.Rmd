@@ -52,11 +52,20 @@ pdat <- xdat %>%
 
 create a function for looping
 ```{r}
-loop_mvglm <- function(dat, covrate, nperm){
-  dat %>% 
-    mutate(observed = ifelse(runif(nrow(.)) <= covrate, 'Y', 'N')) %>%
-    pivot_longer(cols=-c(uid, days.fished, observed, BLOCK),
-                 names_to = 'species', values_to = 'biomass') %>%
+loop_mvglm <- function(dat, covrate, nperm, bias=NA){
+  idat <- dat %>% 
+    mutate(observed = ifelse(runif(nrow(.)) <= covrate, 'Y', 'N')) %>% 
+        pivot_longer(cols=-c(uid, days.fished, observed, BLOCK),
+                 names_to = 'species', values_to = 'biomass') 
+  
+  if(!is.na(bias)) {
+    #add bias to all species equally for observed trips only
+    idat <- idat %>% 
+        mutate(biomass =  biomass * ifelse(observed == 'Y',(1+bias), 1))
+  }
+  
+  
+  idat %>%
     mvglm_obs_dd(n_permutations=nperm) %>%
     as.data.frame() #get p and uni.p's on one row per iteration
 }
@@ -79,6 +88,7 @@ save(res_df, file="output_data/obbsai3spp100rep100permcov25_20250813.Rdat")
 
 
 ```{r}
+load("output_data/obbsai3spp100rep100permcov25_20250813.Rdat")
 res_df %>%
   mutate(idx = 1:nrow(.)) %>%
   pivot_longer(cols=-idx) %>%
@@ -123,6 +133,7 @@ save(res_cov_df, file="output_data/obbsai3spp100rep100permcovramp_20250813.Rdat"
 ```
 
 
+
 ```{r}
 load("output_data/obbsai3spp100rep100permcovramp_20250813.Rdat")
 res_cov_df %>%
@@ -137,6 +148,84 @@ res_cov_df %>%
   theme_bw() +
   labs(title = 'OB FIXED BSAI', subtitle = '100 iterations, random trip sampling',
        x='coverage rate', y='false positive rate (p < 0.05)')
+
+
+nreps = 200
+res_cov_df %>%
+  mutate(idx = 1:nrow(.)) %>%
+  pivot_longer(cols=-c(idx, covrate)) %>%
+  group_by(name) %>%
+  slice_sample(n = 100*nreps, replace=TRUE) %>%
+  mutate(repnum = rep(1:nreps, each=100)) %>%
+  group_by(repnum, name, covrate) %>%
+  summarize(falsepos = mean(value < 0.05), .groups="drop") %>%
+  ggplot(aes(x=covrate, y=falsepos)) +
+  facet_wrap(~name) +
+  #geom_point(alpha = 0.02) +
+  geom_boxplot(aes(group=covrate)) +
+  #geom_smooth() +
+  theme_bw() +
+  labs(title = 'OB FIXED BSAI',
+       subtitle = '100 iterations of random trip sampling, 200 bootstrap repeats',
+       x='coverage rate', y='false positive rate (p < 0.05)'
+       ) +
+  geom_hline(yintercept = 0.05, linetype='dashed')
+```
+
+
+#biased samples
+##power to detect 20% reduction on oberved trips, by coverage rate
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
+nperm = 100 #about 1 minute for 100 permutations for 3 species
+nrep = 2
+covrates = seq(0.05, 0.95, by=0.1)
+biasrate = -0.2
+
+res_cov_b20 <- map(rep(covrates, each=nrep), ~{
+    loop_mvglm(pdat, .x, nperm, biasrate) %>%
+    mutate(covrate = .x)
+  })
+
+res_cov_b20_df <- list_rbind(res_cov_b20) 
+
+save(res_cov_b20_df, file="output_data/obbsai3spp100rep100permcovramp_b20_20250815.Rdat")
+```
+
+```{r}
+res_cov_b20_df %>%
+  mutate(idx = 1:nrow(.)) %>%
+  pivot_longer(cols=-c(idx, covrate)) %>%
+  group_by(name, covrate) %>%
+  summarize(truepos = mean(value < 0.05), .groups="drop") %>%
+  ggplot(aes(x=covrate, y=truepos, col=name)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.05, linetype='dashed') +
+  theme_bw() +
+  labs(title = 'OB FIXED BSAI', subtitle = '100 iterations, random trip sampling, -20% bias',
+       x='coverage rate', y='true positive rate (p < 0.05)')
+
+
+nreps = 200
+res_cov_b20_df %>%
+  mutate(idx = 1:nrow(.)) %>%
+  pivot_longer(cols=-c(idx, covrate)) %>%
+  group_by(name) %>%
+  slice_sample(n = 100*nreps, replace=TRUE) %>%
+  mutate(repnum = rep(1:nreps, each=100)) %>%
+  group_by(repnum, name, covrate) %>%
+  summarize(truepos = mean(value < 0.05), .groups="drop") %>%
+  ggplot(aes(x=covrate, y=truepos)) +
+  facet_wrap(~name) +
+  #geom_point(alpha = 0.02) +
+  geom_boxplot(aes(group=covrate)) +
+  #geom_smooth() +
+  theme_bw() +
+  labs(title = 'OB FIXED BSAI',
+       subtitle = '100 iterations of random trip sampling, -20% bias, 200 bootstrap repeats',
+       x='coverage rate', y='true positive rate (p < 0.05)'
+       ) +
+  geom_hline(yintercept = 0.05, linetype='dashed')
 ```
 
 
