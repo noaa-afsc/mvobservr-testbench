@@ -177,8 +177,9 @@ res_cov_df %>%
 ##power to detect 20% reduction on oberved trips, by coverage rate
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
 nperm = 100 #about 1 minute for 100 permutations for 3 species
-nrep = 2
+nrep = 50
 covrates = seq(0.05, 0.95, by=0.1)
+length(covrates)*nrep*nperm/100/60 #estimated run hours at 1 min/100 perm
 biasrate = -0.2
 
 res_cov_b20 <- map(rep(covrates, each=nrep), ~{
@@ -188,10 +189,17 @@ res_cov_b20 <- map(rep(covrates, each=nrep), ~{
 
 res_cov_b20_df <- list_rbind(res_cov_b20) 
 
-save(res_cov_b20_df, file="output_data/obbsai3spp100rep100permcovramp_b20_20250815.Rdat")
+res_cov_b20_df <- res_cov_b20_df %>%
+  filter(row_number() <= 500)
+save(res_cov_b20_df, file="output_data/obbsai3spp100rep100permcovramp_b20_20250820.Rdat")
+
+res_cov_b20_df %>%
+  count(covrate)
 ```
 
 ```{r}
+load("output_data/obbsai3spp100rep100permcovramp_b20_20250820.Rdat")
+
 res_cov_b20_df %>%
   mutate(idx = 1:nrow(.)) %>%
   pivot_longer(cols=-c(idx, covrate)) %>%
@@ -211,12 +219,16 @@ res_cov_b20_df %>%
   mutate(idx = 1:nrow(.)) %>%
   pivot_longer(cols=-c(idx, covrate)) %>%
   group_by(name) %>%
+  mutate(name = factor(name,
+                       levels=c("p","uni.p.Pacific.Cod","uni.p.Pacific.Halibut","uni.p.Sablefish..blackcod."),
+                       labels=c("overall p-value", "Pac. Cod (freq 63%, biom 81%)",
+                                "Pac. Hal. (freq 26%, biom 5%)", "Sablefish (freq 31%, biom 13%)"))) %>%
   slice_sample(n = 100*nreps, replace=TRUE) %>%
   mutate(repnum = rep(1:nreps, each=100)) %>%
   group_by(repnum, name, covrate) %>%
   summarize(truepos = mean(value < 0.05), .groups="drop") %>%
   ggplot(aes(x=covrate, y=truepos)) +
-  facet_wrap(~name) +
+  facet_wrap(~name, scales="free") +
   #geom_point(alpha = 0.02) +
   geom_boxplot(aes(group=covrate)) +
   #geom_smooth() +
@@ -225,8 +237,27 @@ res_cov_b20_df %>%
        subtitle = '100 iterations of random trip sampling, -20% bias, 200 bootstrap repeats',
        x='coverage rate', y='true positive rate (p < 0.05)'
        ) +
-  geom_hline(yintercept = 0.05, linetype='dashed')
+  geom_hline(yintercept = 0.05, linetype='dashed') +
+  stat_summary(fun=mean, geom="line")
 ```
+
+Real expected biases for OB FIXED BSAI
+Spp     Freq    Biom(%) Bias %
+P Cod   63.1    80.6      3.1
+Sable   30.9    13.4     12.5
+P Hal   26.2     5.4    -39.7
+Oct     19.4     0.5     99.2
+Arr Fl   3.1    <0.1    -88.5
+Atk Mk   3.1    <0.1    -63.9
+Oth Scu 19.1    <0.1    -12.4
+P Perc   5.3    <0.1     90.5
+Poll    12.2    <0.1     47.6
+Rgh Rk   5.6    <0.1    196.7
+Sh Rck   2.2    <0.1    600.2
+Th Rck   5.6    <0.1    249.6
+YE Rck   2.8    <0.1     81.4
+YF Sol   4.4    <0.1    -48.0
+
 
 
 
