@@ -1,3 +1,4 @@
-*.html
-/source_data
+.Rproj.user
 .Rhistory
+.RData
+.Ruserdata
