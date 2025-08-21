@@ -20,93 +20,102 @@ source("functions/loop_mvglm.R")
 
 
 ```{r}
-trips = 300
-prop_targ = 0.3
-sp1_params = c(3, 0.1)
-sp2_params = c(log(exp(sp1_params[1])*(1-prop_targ)), 0.1*(1-prop_targ))
-
-tripdat <- data.frame(uid = 1:trips) %>%
-  mutate(sp1 = rlnorm(trips, sp1_params),
-         sp2 = rlnorm(trips, sp2_params))
-
-prop_sp1 <- sum(tripdat$sp1)/(sum(tripdat$sp1) + sum(tripdat$sp2)); prop_sp1
-
-pdat <- tripdat %>%
-  mutate(observed = 'N', BLOCK = 'block', days.fished = 1) 
-
-loop_mvglm(pdat, covrate = 0.25, nperm = 10, bias = 0)
-```
-
-```{r}
-twospp_dat_by_prop <- function(ntrips, prop, params) {
-  #draw a weight from a lognormal distribution (specified by params) for each of ntrips
-  #set species 1 weight (sp1) as the drawn weight times the proportion of species 1 (prop)
-  #set species 2 weight (sp2) as the remainder
-  #drop the total weight
-  data.frame(uid = 1:ntrips) %>%
-    mutate(wt = rlnorm(ntrips, params),
-           sp1 = wt*prop,
-           sp2 = wt*(1-prop)) %>%
-    select(-wt)
-}
-
-twospp_dat_by_params <- function(ntrips, params1, params2) {
-  data.frame(uid = 1:ntrips) %>%
-    mutate(sp1 = rlnorm(trips, sp1_params),
-         sp2 = rlnorm(trips, sp2_params)
-    )
+generate_spp_biomass <- function(nrec, mus) {
+  df <- data.frame(uid = 1:nrec)
+  for(i in 1:length(mus)) {
+    df[,paste0("sp",i)] <- rtweedie(nrec, p=1.6, mu=mus[i], phi=5)
+  }
+  return(df)
 }
 
 ```
 
 
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
-nperm = 30 #about 1 minute for 100 permutations for 3 species
-nrep = 1
-props = seq(0.5, 0.95, by=0.25)
+nperm = 100 #about 1 minute for 100 permutations for 3 species
+nrep = 20
+n_species <- 2
+n_records <- 300 #about 11 minutes for 100 reps
 
-length(props)*nrep*nperm/100/60 #estimated run hours at 1 min/100 perm
-biasrate = -0.1
-ntrips = 300
+nrep/100*11/60*nperm/100 #estimated run hours at 1 min/100 perm
+biasrate = -0.3
 
-params = c(3, 1) #lognormal mu and sd
-
-res_prop_b30 <- map(rep(props, each=nrep), ~{
-  print(now())
-  twospp_dat_by_prop(ntrips, .x, params) %>%
+res_prop_b30 <- map(1:nrep, ~{
+  #set up means for tweedie, with highest mean biomass sp first
+  mu_values <- sort(rlnorm(n_species, meanlog = 2, sdlog = 1.5), decreasing=TRUE)
+  
+  #generate data and calculate proportions
+  gen_dat <- generate_spp_biomass(n_records, mu_values)  
+  props <- gen_dat %>%
+    pivot_longer(-uid) %>%
+    group_by(name) %>%
+    summarize(total_biomass = sum(value), .groups="drop") %>%
+    mutate(prop_biomass = total_biomass/sum(total_biomass)) %>%
+    pivot_wider(names_from = name, values_from = c(total_biomass, prop_biomass))
+  
+  #pass generated data through mvglm
+  gen_res <- gen_dat %>%
     mutate(BLOCK = "block", days.fished = 1) %>% #needed for mvglm_obs_dd
     loop_mvglm(covrate = 0.25, nperm = nperm, bias = biasrate) %>%
-    pluck("ps") %>% #just care about p-values for this one
-    mutate(prop = .x)
+    pluck("ps") %>%
+    rename_with(~str_c("p_", .x), -p) #append "p_" to species name
+  
+  cbind(props, gen_res)
   })
 
-
-
-res_prop_b30 <- map(rep(props, each=nrep), ~{
-  print(now())
-  d <- twospp_dat_by_params(ntrips, sp1_params, sp2_params)
-  prop <- sum(d$sp1)/(sum(d$sp1)+sum(d$sp2))
-  twospp_dat_by_prop(ntrips, .x, params) %>%
-    mutate(BLOCK = "block", days.fished = 1) %>% #needed for mvglm_obs_dd
-    loop_mvglm(covrate = 0.25, nperm = nperm, bias = biasrate) %>%
-    pluck("ps") %>% #just care about p-values for this one
-    mutate(prop = .x)
-  })
-
-
-res_prop_b30_df <- list_rbind(res_prop_b30) 
+res_prop_b30_df <- list_rbind(res_prop_b30) %>%
+  mutate(prop1_bin = trunc(prop_biomass_sp1/0.1,0)*0.1)
 
 res_prop_b30_df %>%
-  count(prop)
+  rowwise() %>%
+  mutate(bp_index = max(c_across(starts_with("prop_"))),
+         shannon_entropy = -sum(c_across(starts_with("prop_"))*log(c_across(starts_with("prop_")))),
+         calculated_n1 = exp(shannon_entropy),
+         richness = sum(c_across(starts_with("total_biomass"))),
+         calculated_J = shannon_entropy / log(richness)
+          # We add a very small number to proportions to avoid log(0) issues.
+          # shannon_entropy <- -sum(proportions * log(proportions + 1e-9))
+          # calculated_n1 <- exp(shannon_entropy)
+          
+          # Calculate Pielou's J'.
+          # richness <- sum(biomass > 0)
+          # if (richness <= 1) next # Evenness is undefined for 1 or 0 species.
+          # calculated_J <- shannon_entropy / log(richness)
+         ) %>%
+  ungroup()
 
-save(res_prop_b30_df, file="output_data/simdat2spp100rep100perm_propramp_b20_20250820.Rdat")
+res_prop_b30_df %>%
+  count(prop1_bin)
 
+save(res_prop_b30_df, file="output_data/simdat2spp100rep100perm_propvar_b30_20250820.Rdat")
+
+```
+
+real weight example sums:
+Pacific Cod       7783
+Sablefish         1299
+Pacific Halibut    514
+Octopus             50
+
+
+
+```{r}
+res_prop_b30_df %>%
+  mutate(delta = p - p_sp1) %>%
+  ggplot(aes(x=prop_biomass_sp1, y=delta)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth()
 ```
 
 ```{r}
 res_prop_b30_df %>%
-  mutate(delta = p - sp1) %>%
-  ggplot(aes(x=prop, y=delta)) +
-  geom_point()
+  select(prop1_bin, p, p_sp1, p_sp2) %>%
+  pivot_longer(-prop1_bin) %>%
+  filter(prop1_bin >= 0.5) %>%
+  ggplot(aes(x=prop1_bin, y=value, group=prop1_bin)) +
+  geom_boxplot() +
+  #geom_jitter(alpha = 0.2, width=0.01) +
+  facet_wrap(~name) +
+  coord_cartesian(ylim=c(0,NA))
 ```
 
