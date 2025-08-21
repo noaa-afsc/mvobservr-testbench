@@ -19,7 +19,7 @@ load("source_data/1_mvglm_obs_data_segmented.Rdata") #original data
 
 model_start <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
                        select(STRATA, Species) %>% distinct()) %>%
-  select(species = Species, uid = TRIP_ID, days.fished, observed = OBSERVED_FLAG, biomass = Biomass, BLOCK, days.fished)
+  select(species = Species, uid = TRIP_ID, days.fished, observed = OBSERVED_FLAG, biomass = Biomass, BLOCK, days.fished, STRATA)
 
 model_start.l <- split(model_start, f = ~ STRATA)
 
@@ -40,7 +40,7 @@ set.seed(123)
 system.time(out_orig <- mvglm_obs(x, 
                           add_var = "days.fished",
                           block = "BLOCK",
-                          n_permutations = 2,
+                          n_permutations = 1,
                           )) 
 out_orig$results
 ```
@@ -445,8 +445,7 @@ function (formula, fn, family = "negative.binomial", data = NULL,
 
 
 ```{r anova_obs function, eval=FALSE}
-anova_obs
-function(object, ..., nBoot = 99, p.uni="none", block = object1$block, 
+anova_obs_dd <- function(object, ..., nBoot = 99, p.uni="none", block = object1$block, 
                             nCores = 1, bootID = NULL, replace=TRUE) {
   
   # Modified from mavbund::manyany()
@@ -629,7 +628,9 @@ function(object, ..., nBoot = 99, p.uni="none", block = object1$block,
     }
   } else {
     # pj = (1 + sum(statj.i > statj-1.e-8) ) / (nBoot + 1) OLD
+    nBootSuccess <- as.numeric(length(stat.i[!is.na(stat.i)])) #Number of successful bootstraps
     pj <- (1 + sum(statj.i > (statj - 1.e-8), na.rm = TRUE) ) / (nBootSuccess + 1)
+    p <- (1 + sum(stat.i > (stat - 1.e-8), na.rm = TRUE) ) / (nBootSuccess + 1) 
   }
   
   class(stat.i) <- "numeric"
