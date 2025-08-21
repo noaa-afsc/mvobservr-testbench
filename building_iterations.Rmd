@@ -14,6 +14,7 @@ library(tidyverse)
 library(FMAtools)  
 library(mvobservr)
 source("functions/mvglm_obs_dd.R")
+source("functions/loop_mvglm.R")
 ```
 
 ```{r dataprep}
@@ -51,26 +52,7 @@ pdat <- xdat %>%
 #test 1 - resampling observed trips randomly
 
 create a function for looping
-```{r}
-loop_mvglm <- function(dat, covrate, nperm, bias=NA){
-  idat <- dat %>% 
-    mutate(observed = ifelse(runif(nrow(.)) <= covrate, 'Y', 'N')) %>% 
-        pivot_longer(cols=-c(uid, days.fished, observed, BLOCK),
-                 names_to = 'species', values_to = 'biomass') 
-  
-  if(!is.na(bias)) {
-    #add bias to all species equally for observed trips only
-    idat <- idat %>% 
-        mutate(biomass =  biomass * ifelse(observed == 'Y',(1+bias), 1))
-  }
-  
-  
-  idat %>%
-    mvglm_obs_dd(n_permutations=nperm) %>%
-    as.data.frame() #get p and uni.p's on one row per iteration
-}
-```
-
+(moved to loop_mvglm.R)
 
 set up simple loop and capture output from each rep
 ```{r, warning=FALSE, message=FALSE}
@@ -177,23 +159,21 @@ res_cov_df %>%
 ##power to detect 20% reduction on oberved trips, by coverage rate
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
 nperm = 100 #about 1 minute for 100 permutations for 3 species
-nrep = 50
+nrep = 100
 covrates = seq(0.05, 0.95, by=0.1)
 length(covrates)*nrep*nperm/100/60 #estimated run hours at 1 min/100 perm
-biasrate = -0.2
+biasrate = -0.3
 
-res_cov_b20 <- map(rep(covrates, each=nrep), ~{
+res_cov_b30 <- map(rep(covrates, each=nrep), ~{
     loop_mvglm(pdat, .x, nperm, biasrate) %>%
     mutate(covrate = .x)
   })
 
-res_cov_b20_df <- list_rbind(res_cov_b20) 
+res_cov_b30_df <- list_rbind(res_cov_b30) 
 
-res_cov_b20_df <- res_cov_b20_df %>%
-  filter(row_number() <= 500)
-save(res_cov_b20_df, file="output_data/obbsai3spp100rep100permcovramp_b20_20250820.Rdat")
+save(res_cov_b30_df, file="output_data/obbsai3spp100rep100permcovramp_b30_20250820.Rdat")
 
-res_cov_b20_df %>%
+res_cov_b30_df %>%
   count(covrate)
 ```
 
@@ -223,8 +203,8 @@ res_cov_b20_df %>%
                        levels=c("p","uni.p.Pacific.Cod","uni.p.Pacific.Halibut","uni.p.Sablefish..blackcod."),
                        labels=c("overall p-value", "Pac. Cod (freq 63%, biom 81%)",
                                 "Pac. Hal. (freq 26%, biom 5%)", "Sablefish (freq 31%, biom 13%)"))) %>%
-  slice_sample(n = 100*nreps, replace=TRUE) %>%
-  mutate(repnum = rep(1:nreps, each=100)) %>%
+  slice_sample(n = 50*nreps, replace=TRUE) %>%
+  mutate(repnum = rep(1:nreps, each=50)) %>%
   group_by(repnum, name, covrate) %>%
   summarize(truepos = mean(value < 0.05), .groups="drop") %>%
   ggplot(aes(x=covrate, y=truepos)) +
@@ -234,7 +214,7 @@ res_cov_b20_df %>%
   #geom_smooth() +
   theme_bw() +
   labs(title = 'OB FIXED BSAI',
-       subtitle = '100 iterations of random trip sampling, -20% bias, 200 bootstrap repeats',
+       subtitle = '50 iterations of random trip sampling, -20% bias, 200 bootstrap repeats',
        x='coverage rate', y='true positive rate (p < 0.05)'
        ) +
   geom_hline(yintercept = 0.05, linetype='dashed') +
@@ -260,6 +240,44 @@ YF Sol   4.4    <0.1    -48.0
 
 
 
+#power by frequency or biomass -- SKIP FOR NOW
+generate species with given biomass/frequency and run at 50% coverage (range of highest power)
 
+run for single species from real data to make sure comparable results with both multi-species run and simulated biomass runs
+```{r}
+pdat %>%
+  select(uid, days.fished, observed, BLOCK, `Pacific Cod`) %>%
+  loop_mvglm(covrate=0.5, nperm=10, bias=0)
+```
+
+  
+  
+  # check if only a single species; if so, remove species from the model_call for tweedie profile
+  nspp <- n_distinct(dat$species)
+  if(nspp == 1) {
+    model_call <- gsub("species \\+ ", "", model_call)
+  } else {
+    model_call <- model_call
+  }
+
+
+#next steps
+**diversity/evenness vs. detection
+high observer effect on low biomass species
+
+perfect equitability w/ 10% or 30% OE
+then make it lopside (gini 0.8, spp1 80%, spp2 15%, spp3 5%) 
+how does overall p-value change?
+
+**individual species in mvglm vs. individual OE tests
+**combined species in mvglm vs. combined OE tests
+  univariate compares combined weight vs. single weight
+
+use simulated for sensitivity analysis
+use real data for comparison to other methods
+
+delta between overall p-value and most abundant species = advantage of multivariate test?
+as a function of how those biomass differences are distributed?
+does mv give a boost by considering contributions of other species
 
 
