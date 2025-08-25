@@ -1,0 +1,16 @@
+---
+title: "comparison of observer effect tests"
+output: html_notebook
+---
+
+Goal: compare outputs from mvglm to the 5 tests evaluated in Duarte & Cadrin
+
+```{r setup}
+library(tidyverse)
+library(FMAtools)  
+library(mvobservr)
+source("functions/mvglm_obs_dd.R")
+source("functions/loop_mvglm.R")
+```
+
+
