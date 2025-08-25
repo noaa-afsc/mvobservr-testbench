@@ -8,9 +8,9 @@ library(tweedie)
 # --- Simulation Setup ---
 
 # Set the number of species to a more realistic value.
-n_species <- 25
+n_species <- 15
 # Set how many valid communities we want to find for each target level.
-n_samples_per_level <- 50
+n_samples_per_level <- 500
 # Set the tolerance for matching the target Berger-Parker index.
 # This needs to be small since our steps are small.
 tolerance <- 0.005
@@ -18,7 +18,9 @@ tolerance <- 0.005
 tweedie_power <- 1.6
 # Set the dispersion parameter for the Tweedie distribution.
 # Higher values create more variance (more rare/dominant species).
-phi <- 5
+phi <- 6
+# Set the desired total biomass for every saved population.
+fixed_total_biomass <- 10000
 # for reproducibility
 set.seed(123)
 
@@ -29,75 +31,106 @@ target_bp_levels <- seq(0.5, 0.95, by = 0.05)
 
 # --- Data Storage ---
 
-# We'll store the results for each level in a list and combine them at the end.
-results_list <- list()
+# Create a list to act as "buckets" for each target level.
+results_list <- setNames(lapply(target_bp_levels, function(x) data.frame()), target_bp_levels)
+# Create a counter to track how many samples we've found for each level.
+sample_counts <- setNames(rep(0, length(target_bp_levels)), target_bp_levels)
 
 # --- Simulation Loop ---
 
-# Loop over each of our target Berger-Parker values using an index 'j'.
-for (j in 1:length(target_bp_levels)) {
+message("Generating populations and sorting into target levels...")
+attempts <- 0
+max_attempts <- 3000000 # Set a generous ceiling for the total search.
+
+# Calculate the total number of samples needed for the progress bar.
+total_needed <- n_samples_per_level * length(target_bp_levels)
+# Initialize the progress bar.
+pb <- txtProgressBar(min = 0, max = total_needed, style = 3)
+
+# Loop until all levels have the desired number of samples.
+while(any(sample_counts < n_samples_per_level) && attempts < max_attempts) {
+  attempts <- attempts + 1
   
-  # Get the target value for this iteration.
-  target_bp <- target_bp_levels[j]
+  # Step 1: Generate a single realistic community.
+  mu_values <- rlnorm(n_species, meanlog = 2, sdlog = 1.5)
+  biomass <- rtweedie(n_species, p = tweedie_power, mu = mu_values, phi = phi)
   
-  # Create an empty data frame to store results for the current target level.
-  level_results <- data.frame()
+  if (sum(biomass) == 0) next
   
-  # Print a message to the console to show progress.
-  message(paste("Searching for communities with Berger-Parker ≈", target_bp))
+  # Step 2: Calculate its Berger-Parker index.
+  proportions <- biomass / sum(biomass)
+  bp_index <- max(proportions)
   
-  # Keep track of attempts to prevent an infinite loop.
-  attempts <- 0
-  max_attempts <- 1000000 # Increased attempts as criteria are stricter.
+  # Step 3: Find the closest target level.
+  closest_target_index <- which.min(abs(target_bp_levels - bp_index))
+  closest_target_bp <- target_bp_levels[closest_target_index]
   
-  # Loop until we have found the desired number of matching communities.
-  while (nrow(level_results) < n_samples_per_level && attempts < max_attempts) {
-    attempts <- attempts + 1
+  # Step 4: Check if it's a match and if that bucket still needs samples.
+  if (abs(bp_index - closest_target_bp) <= tolerance && sample_counts[as.character(closest_target_bp)] < n_samples_per_level) {
     
-    # Step 1: Generate a realistic community using the Tweedie distribution.
-    mu_values <- rlnorm(n_species, meanlog = 2, sdlog = 1.5)
-    biomass <- rtweedie(n_species, p = tweedie_power, mu = mu_values, phi = phi)
+    # If it's a match, calculate other indices.
+    shannon_entropy <- -sum(proportions * log(proportions + 1e-9))
+    calculated_n1 <- exp(shannon_entropy)
+    richness <- sum(biomass > 0)
+    if (richness <= 1) next
+    calculated_J <- shannon_entropy / log(richness)
     
-    # Skip if total biomass is zero.
-    if (sum(biomass) == 0) next
+    # Normalize biomass and create the data row.
+    normalized_biomass <- proportions * fixed_total_biomass
+    biomass_list <- as.list(setNames(normalized_biomass, paste0("sp", 1:n_species)))
     
-    # Step 2: Calculate diversity indices.
-    proportions <- biomass / sum(biomass)
-    bp_index <- max(proportions)
+    new_row <- data.frame(
+      PopulationID = sample_counts[as.character(closest_target_bp)] + 1,
+      BergerParker = bp_index,
+      N1 = calculated_n1,
+      Pielou_J = calculated_J,
+      TargetBP = as.factor(closest_target_bp),
+      biomass_list
+    )
     
-    # Step 3: Check if the community's dominance matches our target.
-    if (abs(bp_index - target_bp) <= tolerance) {
-      
-      # Step 4: If it matches, calculate other indices and store everything.
-      # We add a very small number to proportions to avoid log(0) issues.
-      shannon_entropy <- -sum(proportions * log(proportions + 1e-9))
-      calculated_n1 <- exp(shannon_entropy)
-      
-      # Calculate Pielou's J'.
-      richness <- sum(biomass > 0)
-      if (richness <= 1) next # Evenness is undefined for 1 or 0 species.
-      calculated_J <- shannon_entropy / log(richness)
-      
-      # Store the results.
-      new_row <- data.frame(
-        BergerParker = bp_index,
-        N1 = calculated_n1,
-        Pielou_J = calculated_J,
-        TargetBP = as.factor(target_bp)
-      )
-      
-      level_results <- rbind(level_results, new_row)
-    }
+    # Add the new row to the correct bucket in the list.
+    results_list[[as.character(closest_target_bp)]] <- rbind(results_list[[as.character(closest_target_bp)]], new_row)
+    
+    # Increment the counter for that level.
+    sample_counts[as.character(closest_target_bp)] <- sample_counts[as.character(closest_target_bp)] + 1
+    
+    # Update the progress bar with the current total number of samples found.
+    setTxtProgressBar(pb, sum(sample_counts))
   }
+}
+
+# Close the progress bar.
+close(pb)
+
+message(paste("\nSimulation complete after", attempts, "attempts."))
+
+# --- Data Reordering ---
+message("Reordering species abundances in the final results...")
+
+# Loop through each data frame in the results list (one for each target BP level)
+for (i in 1:length(results_list)) {
+  df <- results_list[[i]]
   
-  # Add the results for this level to our main list using the correct index 'j'.
-  results_list[[j]] <- level_results
-  message(paste("   ...Found", nrow(level_results), "samples in", attempts, "attempts."))
+  # Skip if the data frame is empty (no samples were found for this level)
+  if (nrow(df) == 0) next
   
-  # Warn the user if the loop timed out.
-  if (attempts >= max_attempts) {
-    warning(paste("Could not find enough samples for target Berger-Parker =", target_bp))
-  }
+  # Identify the columns that contain the biomass data
+  biomass_cols_indices <- grep("sp", names(df))
+  biomass_data <- df[, biomass_cols_indices]
+  
+  # Sort each row (population) in descending order
+  # t() is used because apply returns a matrix with columns as populations
+  sorted_biomass <- t(apply(biomass_data, 1, sort, decreasing = TRUE))
+  
+  # Convert back to a data frame and assign original names
+  sorted_biomass_df <- as.data.frame(sorted_biomass)
+  names(sorted_biomass_df) <- names(biomass_data)
+  
+  # Replace the original biomass columns with the sorted ones
+  df[, biomass_cols_indices] <- sorted_biomass_df
+  
+  # Put the modified data frame back into the list
+  results_list[[i]] <- df
 }
 
 # --- Data Preparation and Plotting ---
@@ -105,7 +138,7 @@ for (j in 1:length(target_bp_levels)) {
 # Combine the list of data frames into one single data frame for plotting.
 final_results_df <- do.call(rbind, results_list)
 
-# You can view the final data frame with the abundances by running:
+# You can view the final data frame with the full biomass data by running:
 # View(final_results_df)
 
 # Generate the scatter plot using ggplot2.
