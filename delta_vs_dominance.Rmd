@@ -33,7 +33,7 @@ generate_spp_biomass <- function(nrec, mus) {
 
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
 nperm = 100 #about 1 minute for 100 permutations for 3 species
-nrep = 20
+nrep = 2000
 n_species <- 2
 n_records <- 300 #about 11 minutes for 100 reps
 
@@ -66,7 +66,7 @@ res_prop_b30 <- map(1:nrep, ~{
 res_prop_b30_df <- list_rbind(res_prop_b30) %>%
   mutate(prop1_bin = trunc(prop_biomass_sp1/0.1,0)*0.1)
 
-res_prop_b30_df %>%
+res_prop_b30_df <- res_prop_b30_df %>%
   rowwise() %>%
   mutate(bp_index = max(c_across(starts_with("prop_"))),
          shannon_entropy = -sum(c_across(starts_with("prop_"))*log(c_across(starts_with("prop_")))),
@@ -102,7 +102,21 @@ Octopus             50
 ```{r}
 res_prop_b30_df %>%
   mutate(delta = p - p_sp1) %>%
-  ggplot(aes(x=prop_biomass_sp1, y=delta)) +
+  ggplot(aes(x=bp_index, y=delta)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth()
+
+
+res_prop_b30_df %>%
+  mutate(delta = p - p_sp1) %>%
+  ggplot(aes(x=calculated_n1, y=delta)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth()
+
+
+res_prop_b30_df %>%
+  mutate(delta = p - p_sp1) %>%
+  ggplot(aes(x=calculated_J, y=delta)) +
   geom_point(alpha = 0.5) +
   geom_smooth()
 ```
@@ -113,9 +127,70 @@ res_prop_b30_df %>%
   pivot_longer(-prop1_bin) %>%
   filter(prop1_bin >= 0.5) %>%
   ggplot(aes(x=prop1_bin, y=value, group=prop1_bin)) +
-  geom_boxplot() +
-  #geom_jitter(alpha = 0.2, width=0.01) +
-  facet_wrap(~name) +
-  coord_cartesian(ylim=c(0,NA))
+  #geom_boxplot() +
+  geom_jitter(alpha = 0.2, width=0.01) +
+  facet_wrap(~name) 
 ```
+
+```{r}
+res_prop_b30_df %>%
+  filter(prop1_bin >= 0.5) %>%
+  group_by(prop1_bin) %>%
+  summarize(power=mean(p_sp1 < 0.05)) %>%
+  ggplot(aes(x=prop1_bin, y=power)) +
+  geom_point() +
+  geom_line() +
+  coord_cartesian(ylim=c(0,NA))
+
+
+res_prop_b30_df %>%
+  mutate(prop2_bin = trunc(prop_biomass_sp2/0.1,0)*0.1) %>%
+  filter(prop2_bin < 0.5) %>%
+  group_by(prop2_bin) %>%
+  summarize(power=mean(p_sp2 < 0.05)) %>%
+  ggplot(aes(x=prop2_bin, y=power)) +
+  geom_point() +
+  geom_line() +
+  coord_cartesian(ylim=c(0,NA))
+
+bootstrap_size = 200
+n_bootstraps = 500
+
+res_prop_b30_df %>%
+  add_row(
+    #get sp2 for combined plot
+    res_prop_b30_df %>%
+      mutate(prop1_bin = trunc(prop_biomass_sp2/0.1,0)*0.1) %>%
+      mutate(p_sp1 = p_sp2)
+  ) %>%
+  select(prop1_bin, p_sp1) %>%
+  mutate(bin = as.factor(prop1_bin)) %>%
+  split(~bin) %>%
+  map(.x=., .f=~{slice_sample(.x, n=bootstrap_size*n_bootstraps, replace=TRUE) %>%
+      mutate(boot = rep(1:n_bootstraps, each=bootstrap_size)) %>%
+      group_by(bin, boot) %>%
+      summarize(psig=mean(p_sp1 < 0.05), 
+                .groups="drop")
+    }) %>%
+  list_rbind() %>%
+  group_by(bin) %>%
+      summarize(power=mean(psig),
+                cilo = quantile(psig, 0.025),
+                cihi = quantile(psig, 0.975),
+                n=n(),
+                .groups="drop") %>%
+  ggplot(aes(x=bin, y=power, ymin=cilo, ymax=cihi, group=1)) +
+  geom_point() +
+  geom_line() +
+  geom_ribbon(alpha = 0.2) +
+  labs(x="species biomass as proprotion of total biomass",
+       y="power (proportion of iterations with significant result)",
+       title="Generated data using Tweedie model",
+       subtitle = "200 iterations, 25% coverage, -30% bias, 100 permutations, 500 bootstraps") +
+  theme_bw() +
+  coord_cartesian(ylim=c(0,1))
+```
+
+
+
 
