@@ -64,7 +64,7 @@ res_prop_b30 <- map(1:nrep, ~{
   })
 
 res_prop_b30_df <- list_rbind(res_prop_b30) %>%
-  mutate(prop1_bin = trunc(prop_biomass_sp1/0.1,0)*0.1)
+  mutate(prop1_bin = trunc(prop_biomass_sp1/0.05,0)*0.05)
 
 res_prop_b30_df <- res_prop_b30_df %>%
   rowwise() %>%
@@ -121,16 +121,7 @@ res_prop_b30_df %>%
   geom_smooth()
 ```
 
-```{r}
-res_prop_b30_df %>%
-  select(prop1_bin, p, p_sp1, p_sp2) %>%
-  pivot_longer(-prop1_bin) %>%
-  filter(prop1_bin >= 0.5) %>%
-  ggplot(aes(x=prop1_bin, y=value, group=prop1_bin)) +
-  #geom_boxplot() +
-  geom_jitter(alpha = 0.2, width=0.01) +
-  facet_wrap(~name) 
-```
+
 
 ```{r}
 res_prop_b30_df %>%
@@ -142,17 +133,6 @@ res_prop_b30_df %>%
   geom_line() +
   coord_cartesian(ylim=c(0,NA))
 
-
-res_prop_b30_df %>%
-  mutate(prop2_bin = trunc(prop_biomass_sp2/0.1,0)*0.1) %>%
-  filter(prop2_bin < 0.5) %>%
-  group_by(prop2_bin) %>%
-  summarize(power=mean(p_sp2 < 0.05)) %>%
-  ggplot(aes(x=prop2_bin, y=power)) +
-  geom_point() +
-  geom_line() +
-  coord_cartesian(ylim=c(0,NA))
-
 bootstrap_size = 200
 n_bootstraps = 500
 
@@ -160,7 +140,7 @@ res_prop_b30_df %>%
   add_row(
     #get sp2 for combined plot
     res_prop_b30_df %>%
-      mutate(prop1_bin = trunc(prop_biomass_sp2/0.1,0)*0.1) %>%
+      mutate(prop1_bin = trunc(prop_biomass_sp2/0.05,0)*0.05) %>%
       mutate(p_sp1 = p_sp2)
   ) %>%
   select(prop1_bin, p_sp1) %>%
