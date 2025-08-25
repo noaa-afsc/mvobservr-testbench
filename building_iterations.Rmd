@@ -281,3 +281,82 @@ as a function of how those biomass differences are distributed?
 does mv give a boost by considering contributions of other species
 
 
+```{r}
+res_cov_b20_resamp <- replicate(n=500, 
+                        res_cov_b20_df %>%
+                        mutate(idx = 1:nrow(.)) %>%
+                        pivot_longer(cols=-c(idx, covrate)) %>%
+                        group_by(name) %>%
+                        group_by(covrate, name) %>%
+                        sample_n(size=100, replace=TRUE) %>%
+                        group_by(covrate, name) %>%
+                        summarise(#t_test = mean(tp < 0.05, na.rm=TRUE),
+                                  #f_test = mean(Fp < 0.05, na.rm=TRUE),
+                                  #dAIC = mean(ifelse(glmmconv==1, AICd, NA) > aic_thresh, na.rm=TRUE),
+                                  #KS_test = mean(KSp < 0.05, na.rm=TRUE),
+                                  #median_test = mean(ci_lo > 0 | ci_hi < 0, na.rm=TRUE), 
+                                  mvglm = mean(value < 0.05, na.rm=TRUE),
+                                  .groups="drop"
+                  ), simplify = FALSE) %>%
+              Reduce(f=rbind)
+
+
+res_cov_b20_resamp_summarized <- res_cov_b20_resamp %>%
+  #pivot_longer(cols = -c(covrate), names_to = "test", values_to = "pct_pos") %>%
+  rename(test = name, pct_pos = mvglm) %>%
+  group_by(covrate, test) %>%
+  summarise_all(list(q1=~quantile(., 0.025, na.rm = TRUE),
+                     q2=~quantile(., 0.975, na.rm = TRUE)),
+            .groups="drop") #%>%
+  # mutate(test = factor(test, 
+  #                      levels=c("t_test", "f_test", "dAIC", "KS_test", "median_test"), 
+  #                      ordered=TRUE))
+
+
+res_cov_b20_df %>%
+  mutate(idx = 1:nrow(.)) %>%
+  pivot_longer(cols=-c(idx, covrate)) %>%
+  group_by(name) %>%
+  group_by(covrate, name) %>%
+  summarise(#t_test = mean(tp < 0.05, na.rm=TRUE),
+            #f_test = mean(Fp < 0.05, na.rm=TRUE),
+            #dAIC = mean(ifelse(glmmconv==1, AICd, NA) > aic_thresh, na.rm=TRUE),
+            #KS_test = mean(KSp < 0.05, na.rm=TRUE),
+            #median_test = mean(ci_lo > 0 | ci_hi < 0, na.rm=TRUE), 
+            mvglm = mean(value < 0.05, na.rm=TRUE),
+            .groups="drop"
+            ) %>%
+  #pivot_longer(cols=-c(pcov, pref, bias), names_to="test", values_to = "pct_pos") %>%
+  #mutate(test = factor(test, 
+  #                     levels=c("t_test", "f_test", "dAIC", "KS_test", "median_test"), 
+  #                     ordered=TRUE)) %>%
+  rename(test = name, pct_pos = mvglm) %>%
+  inner_join(res_cov_b20_resamp_summarized, by=c("covrate", "test")) %>%
+  #mutate(pref = factor(pref, levels = c("none", "high", "low"), ordered=TRUE)) %>%
+  mutate(q1 = q1, q2 = q2) %>% #0.025 and 0.975
+  #mutate(bias = factor(as.character(bias))) %>%
+  #filter(bias %in% c("-0.5", "-0.3", "-0.1")) %>%
+  #count(pcov, bias, pref, test)
+  mutate(bias = "-0.2") %>%
+  mutate(test = factor(test,
+      levels=c("p","uni.p.Pacific.Cod","uni.p.Pacific.Halibut","uni.p.Sablefish..blackcod."),
+      labels=c("overall p-value", "Pac. Cod", "Pac. Hal.", "Sablefish"))) %>%
+  ggplot(aes(x=covrate, y=pct_pos, group=bias)) +
+    geom_point(aes(col=bias)) +
+    geom_line(aes(col=bias)) +
+    geom_ribbon(aes(ymin=q1, ymax=q2, fill=bias), alpha = 0.2, stat="identity") +
+    #facet_grid(pref~test, labeller=testlabels)+
+    facet_grid(~test) +
+    theme_bw() +
+    labs(x="Coverage Rate", y="proportion of true positives", 
+         col="Observer Effect", fill="Observer Effect") +
+    # scale_color_manual(values=c("-0.1" = "#DCE319FF", "-0.3" = "#21908CFF", "-0.5" = "#440154FF"), 
+    #                    labels=c("-0.1" = "-10%", "-0.3" = "-30%", "-0.5" = "-50%"),
+    #                    aesthetics = c("color","fill")) +
+    scale_x_continuous(labels = scales::percent, breaks = c(0.05, 0.45, 0.85), limits = c(-0.1,0.9)) +
+  # geom_label(data = test_pref_matrix, inherit.aes = FALSE, aes(label = letter, x=-Inf, y=Inf, hjust = -0.25, vjust = 1.2), 
+  #           label.padding = unit(0.2, "lines"), label.r = unit(0.3, "lines")) +
+  theme(text = element_text(size=13),
+        legend.position = "bottom")
+```
+
