@@ -28,16 +28,13 @@ source("functions/tweedie_sim_generate_trips.R")
 #testing incrementally to make sure all functions working as expected and distributions make sense
 
 ##data generation
-**make trip data x iterations external to this script and pass in those
-**with target bp
-
 ```{r}
 #check distributions of results
 sum(rnbinom(20, size=4, prob=0.15)) #number of trips
 
 test_trips <- map(1:30, ~MakeTrips(nvess = 20, tripsize=4, 
                                    tripprob=0.15, n_species = 2, mumean=2.8, 
-                                   musd=1.5, tweedie_power = 1.4, tweedie_phi = 6)
+                                   musd=0, tweedie_power = 1.4, tweedie_phi = 6)
                   ) %>%
   list_rbind(names_to = 'rep')
 
@@ -109,24 +106,64 @@ map(1:5, ~MakeTrips(nvess = 20, tripsize=4,
 
 ```
 
+```{r}
+test_trips <- MakeTrips(nvess = 20, tripsize=4, 
+                                   tripprob=0.15, n_species = 2, mumean=2.8, 
+                                   musd=0, tweedie_power = 1.4, tweedie_phi = 6
+                  ) %>%
+  obsSelect(pcov = 0.25)
+```
+
+
 ##descriptive stats
 ```{r}
 getDescriptiveStats(test_trips, "sp_1")
+getDescriptiveStats(test_trips, "sp_2")
 ```
 
 ##t and F tests
 ```{r}
 runTandFtests(test_trips, "sp_1")
+runTandFtests(test_trips, "sp_2")
 ```
-#GLMM
+##GLMM
 ```{r}
 runGLMM(test_trips, "sp_1")
+runGLMM(test_trips, "sp_2")
 ```
+
+##mvglm
+```{r}
+test_trips %>%
+    mutate(BLOCK = "block") %>% #needed for mvglm_obs_dd
+    mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
+    pivot_longer(cols=starts_with("sp_"),
+                 names_to = 'species', values_to = 'biomass') %>%
+    mvglm_obs_dd(block = "BLOCK", n_permutations=100) %>%
+    pluck("ps") %>%
+    rename(biomass_total = p) %>%
+    pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
+```
+
+
+#permanova
+```{r, eval=FALSE}
+test_trips
+Y <- test_trips %>% dplyr::select(starts_with("sp_"))
+adon <- vegan::adonis2(Y ~ factor(obs), data = test_trips, permutations = 500, method="euclidean")
+adon$`Pr(>F)`[1]
+```
+
 
 ##all stats together
 ```{r}
-rr <- ObserverEffectStats(test_trips, metrics=c("sp_1","sp_2","biomass_total"), nboot_triplet=100, nperm_mvglm = 10)
-rr 
+test_trips <- test_trips %>%
+    rowwise() %>%
+    mutate(biomass_total = sum(c_across(starts_with("sp_")))) %>%
+    ungroup() 
+system.time(rr <- ObserverEffectStats(test_trips, metrics=c("sp_1","sp_2","biomass_total"), nboot_triplet=500, nperm_mvglm = 100))
+rr #~80s
+
 ```
 
 ##assign significance values
@@ -135,13 +172,6 @@ assign_sig(rr) %>%
   select(metric, mean_O, mean_U, ends_with("sig"))
 ```
 
-#permanova
-```{r}
-test_trips
-Y <- test_trips %>% dplyr::select(sp_1, sp_2)
-adon <- vegan::adonis2(Y ~ factor(obs), data = test_trips, permutations = 99, method="euclidean")
-adon
-```
 
 
 #putting it all together
