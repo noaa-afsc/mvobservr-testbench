@@ -11,15 +11,20 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
   
   if(!is.numeric(xi.vec)) stop("'xi.vec' needs to be a numeric vector to run the tweedie profile!")
   
+  if(!length(unique(x$species))>1) stop("need at least 2 species")
+  
+  if(!length(unique(x$observed))>1) stop("need both observed and unobserved records")
+  
+  
   
   # Specify the model formula here
-  profile_call <- "biomass ~ species + observed"
+  profile_call <- "biomass ~ species + observed + 1"
   if(!is.null(block)) {
     
     if(length(unique(x[[block]])) > 1) {
         profile_call <- paste(profile_call, "+", block) 
         } else {
-        cat(paste0("'", block, "' had only 1 group and was therefore dropped."))
+        #cat(paste0("'", block, "' had only 1 group and was therefore dropped."))
         block <- NULL
         }
   }
@@ -74,7 +79,10 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
   
   # Make a wide-format version of the dataset. There is where 'uid' is important to retain.
   model_dat <- profile_dat %>%
-    tidyr::pivot_wider(names_from = species, values_from = biomass, values_fill = 0) %>% arrange(BLOCK)
+    tidyr::pivot_wider(names_from = species, values_from = biomass, values_fill = 0)
+  if(!is.null(block)) { 
+    model_dat <- model_dat %>% arrange(BLOCK)
+  }
   abund <- mvabund::mvabund(subset(model_dat, select = unique(profile_dat$species)))
   
   # Full Model
@@ -88,6 +96,7 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
   
   # Reduced Model,  Removing observed flag
   model_formula.reduced <-  as.formula(gsub("observed \\+", "", model_call))
+  #model_formula.reduced <- as.formula("abund ~ 1")
   model_dat.reduced <- model.frame(model_formula.reduced, data = model_dat)
   mv_out_reduced <- manyany_obs(fn = "glm", data = model_dat.reduced, 
                                 formula = model_formula.reduced , #Note here the call is updated
@@ -112,5 +121,37 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
       aov_p = aov_p
     )
   )
+  
+  # return(
+  #   list(
+  #     tweedie_profile = list(xi.max = t_profile$xi.max,
+  #                            L.max = t_profile$L.max,
+  #                            x = t_profile$x, 
+  #                            y = t_profile$y
+  #     ),
+  #     model_aov = list(
+  #       formula.main = main_model$formula,
+  #       formula.int = int_model$formula,
+  #       aov = aov_out
+  #     ),
+  #     model_dat = model_dat,
+  #     full_model = list(
+  #       formula = mv_out_full$formula,
+  #       residuals = mv_out_full$residuals,
+  #       linear.predictor = mv_out_full$linear.predictor,
+  #       fitted.values = mv_out_full$fitted.values,
+  #       fits = mv_out_full$fits
+  #     ),
+  #     reduced_model = list(
+  #       formula = mv_out_reduced$formula,
+  #       residuals = mv_out_reduced$residuals,
+  #       linear.predictor = mv_out_reduced$linear.predictor,
+  #       fitted.values = mv_out_reduced$fitted.values,
+  #       fits = mv_out_reduced$fits
+  #     ),
+  #     results = anova_out,
+  #     perm = perm
+  #   )
+  # )
 }
 

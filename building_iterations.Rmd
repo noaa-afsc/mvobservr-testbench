@@ -30,7 +30,7 @@ spp_top_n <- ob.fx.b %>%
   group_by(species) %>%
   summarize(b=sum(biomass)) %>%
   arrange(desc(b)) %>%
-  slice_max(n=3, order_by=b)
+  slice_max(n=2, order_by=b)
 
 #extract a single stratum and reduce the number of species
 xdat <- ob.fx.b %>%

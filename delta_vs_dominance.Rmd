@@ -14,6 +14,7 @@ Simulation:
 library(tidyverse)
 library(FMAtools)  
 library(mvobservr)
+library(tweedie)
 source("functions/mvglm_obs_dd.R")
 source("functions/loop_mvglm.R")
 ```
@@ -32,13 +33,13 @@ generate_spp_biomass <- function(nrec, mus) {
 
 
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
-nperm = 100 #about 1 minute for 100 permutations for 3 species
-nrep = 2000
+nperm = 10 #about 1 minute for 100 permutations for 3 species
+nrep = 2
 n_species <- 2
 n_records <- 300 #about 11 minutes for 100 reps
+biasrate = -0.3
 
 nrep/100*11/60*nperm/100 #estimated run hours at 1 min/100 perm
-biasrate = -0.3
 
 res_prop_b30 <- map(1:nrep, ~{
   #set up means for tweedie, with highest mean biomass sp first
@@ -100,6 +101,11 @@ Octopus             50
 
 
 ```{r}
+load("output_data/simdat2spp100rep100perm_propvar_b30_20250820.Rdat")
+
+res_prop_b30_df %>%
+  summarize(mean(total_biomass_sp1), mean(total_biomass_sp2), sd(total_biomass_sp1), sd(total_biomass_sp2))
+
 res_prop_b30_df %>%
   mutate(delta = p - p_sp1) %>%
   ggplot(aes(x=bp_index, y=delta)) +
@@ -141,7 +147,8 @@ res_prop_b30_df %>%
     #get sp2 for combined plot
     res_prop_b30_df %>%
       mutate(prop1_bin = trunc(prop_biomass_sp2/0.05,0)*0.05) %>%
-      mutate(p_sp1 = p_sp2)
+      mutate(p_sp1 = p_sp2) %>%
+      filter(prop1_bin < 0.5)
   ) %>%
   select(prop1_bin, p_sp1) %>%
   mutate(bin = as.factor(prop1_bin)) %>%
