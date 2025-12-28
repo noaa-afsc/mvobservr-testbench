@@ -34,7 +34,7 @@ sum(rnbinom(20, size=4, prob=0.15)) #number of trips
 
 test_trips <- map(1:30, ~MakeTrips(nvess = 20, tripsize=4, 
                                    tripprob=0.15, n_species = 2, mumean=2.8, 
-                                   musd=0, tweedie_power = 1.4, tweedie_phi = 6)
+                                   musd=0, tweedie_power = 1.6, tweedie_phi = 6)
                   ) %>%
   list_rbind(names_to = 'rep')
 
@@ -646,13 +646,14 @@ save(res_OEall_b30sp2_gentrips_df, file="output_data/simdat_2spp_50repperbp_200p
 
 
 ```{r, fig.width=10, fig.height=8}
+load("output_data/simdat_2spp_50repperbp_200perm_OEtests_b30sp2_2025091621.Rdat")
 bootstrap_size = 50
 n_bootstraps = 500
 
 res_OEall_b30sp2_gentrips_df %>%
   select(target_bp, metric, ends_with("sig")) %>%
   filter(metric == 'biomass_total') %>%
-  mutate(bin = as.factor(1-as.numeric(target_bp))) %>%
+  mutate(bin = as.factor(as.numeric(target_bp))) %>%
   split(~bin) %>%
   map(.x=., .f=~{slice_sample(.x, n=bootstrap_size*n_bootstraps, replace=TRUE) %>%
       mutate(boot = rep(1:n_bootstraps, each=bootstrap_size)) %>%
@@ -671,13 +672,13 @@ res_OEall_b30sp2_gentrips_df %>%
                 cihi = quantile(pct_sig, 0.975),
                 n=n(),
                 .groups="drop") %>%
-  filter(test %in% c("t test", "F test", "permanova", "MVGLM")) %>%
+  #filter(test %in% c("t test", "F test", "permanova", "MVGLM")) %>%
   ggplot(aes(x=bin, y=power, ymin=cilo, ymax=cihi, group=1)) +
   geom_point() +
   geom_line() +
   geom_ribbon(alpha = 0.2) +
   facet_wrap(~test) +
-  labs(x="species 2 biomass as proprotion of total biomass",
+  labs(x="species 1 biomass as proprotion of total biomass",
        y="power (proportion of iterations with significant result)",
        title="Generated data using Tweedie model",
        subtitle = "50 iterations per proportion, 50% coverage, -30% observer effect on species 2, 200 permutations, 500 bootstraps, no vessel effect") +

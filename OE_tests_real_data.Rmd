@@ -72,7 +72,8 @@ oeres <- trips %>%
   mutate(biomass_total = sp_1 + sp_2) %>%
   ObserverEffectStats(metrics = c("sp_1","sp_2","biomass_total"), nperm_mvglm = nperm, nboot_triplet = nboot, nperm_adon=nboot)
 
-oeres
+oeres %>%
+  select(metric, mean_O, mean_U, tp, bhatt, Fp, AICd, bhate, KSp, median_diff, bhatm, mvglm_p, perma_p)
 ```
 
 
@@ -86,7 +87,7 @@ rres <- map(b, ~{
   out_adj <- mvglm_obs(xi, 
                           add_var = "days.fished",
                           block = "BLOCK",
-                          n_permutations = 100,
+                          n_permutations = 500,
                           )
   trips <- xi %>%
   pivot_wider(names_from = species, values_from = biomass)
@@ -96,10 +97,12 @@ rres <- map(b, ~{
     mutate(obs = as.numeric(ifelse(observed == "Y", "1", "0"))) %>%
     mutate(vessnum = BLOCK) %>%
     mutate(biomass_total = sp_1 + sp_2) %>%
-    ObserverEffectStats(metrics = c("sp_1","sp_2","biomass_total"), nperm_mvglm = 100, nboot_triplet = 500, nperm_adon=500)
+    ObserverEffectStats(metrics = c("sp_1","sp_2","biomass_total"), nperm_mvglm = 500, nboot_triplet = 500, nperm_adon=500)
 
   list(out_adj$results, oeres)
 }) 
+
+save(rres, file="output_data/OB_FIXED_BSAI_biasramp_20251203.Rdat")
 
 rres_oe <- lapply(rres, `[[`, 2)
 names(rres_oe) <- as.character(b)
@@ -115,7 +118,7 @@ rres_oe %>%
   select(b, metric, mvglm_p, perma_p, tp) %>%
   filter(metric == "biomass_total") %>%
   arrange(as.numeric(b)) %>%
-  add_column(mp = unlist(rres_mv))%>%
+  add_column(mp = unlist(rres_mv)) %>%
   pivot_longer(cols= c('mvglm_p','perma_p', 'tp' ,'mp')) %>%
   ggplot(aes(x=as.numeric(b), y=value, col=name)) +
   geom_point() +
@@ -146,7 +149,7 @@ rres2 <- map(b, ~{
   out_adj <- mvglm_obs(xi, 
                           add_var = "days.fished",
                           block = "BLOCK",
-                          n_permutations = 100,
+                          n_permutations = 500,
                           )
   trips <- xi %>%
   pivot_wider(names_from = species, values_from = biomass)

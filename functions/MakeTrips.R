@@ -13,7 +13,7 @@ MakeTrips <- function(nvess, tripsize, tripprob, n_species, mumean, musd, tweedi
     mus[,s] <- rlnorm(nvess, mean=mumean+rnorm(1, sd=mumean*0.3), sd=musd)
     #add a small amount of variability (CV = 0.3) so species are not identical
   }
-  mus <- t(apply(mus, 1, sort, decreasing=TRUE))
+  mus <- t(apply(mus, 1, sort, decreasing=TRUE)) #sort columns within each row by descending species weights
   
   #make list of vessels with parameters
   #**species

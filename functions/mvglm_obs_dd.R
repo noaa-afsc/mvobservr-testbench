@@ -39,13 +39,13 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
                                         xi.vec = xi.vec,
                                         do.plot = FALSE, verbose = FALSE, method = "series",
                                         do.ci=FALSE, do.smooth = TRUE, fit.glm = FALSE,
-                                        control = list(maxit = 1000, epsilon = 1e-8)) 
+                                        control = list(maxit = 1000, epsilon = 1e-8), weights=NULL) 
   
   
   ## Examine whether a main effect or interaction term for days.fished is needed ----
   main_model <- glm(data = profile_dat,
                     formula = as.formula(profile_call),
-                    family = statmod::tweedie(var.power = as.numeric(t_profile$xi.max), link.power = 0))
+                    family = statmod::tweedie(var.power = as.numeric( t_profile$xi.max), link.power = 0))
   
   # If both block and add_var are specified, evaluate the model with an interaction between the two
   if(!is.null(block) & !is.null(add_var)) {
@@ -53,7 +53,7 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
     int_call <- gsub(paste("\\+", add_var), paste("*", add_var), profile_call )
     int_model <- glm(data = profile_dat,
                      formula = as.formula(int_call),
-                     family = statmod::tweedie(var.power = as.numeric(t_profile$xi.max), link.power = 0))#)
+                     family = statmod::tweedie(var.power = as.numeric( t_profile$xi.max), link.power = 0))#)
     aov_out <- anova(main_model, int_model, test = "F")
     aov_p <- aov_out$`Pr(>F)`[2]
     
@@ -90,8 +90,8 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
   model_dat.full <- model.frame(model_formula.full, data = model_dat)
   mv_out_full <- manyany_obs(fn = "glm", data = model_dat.full,
                              formula = model_formula.full, #interactions term allows direction to change
-                             family = statmod::tweedie(var.power = as.numeric(t_profile$xi.max), link.power = 0),
-                             var.power = as.numeric(t_profile$xi.max),
+                             family = statmod::tweedie(var.power = as.numeric( t_profile$xi.max), link.power = 0),
+                             var.power = as.numeric( t_profile$xi.max),
                              control = list(maxit = 10000), get.what = "models")
   
   # Reduced Model,  Removing observed flag
@@ -100,8 +100,8 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
   model_dat.reduced <- model.frame(model_formula.reduced, data = model_dat)
   mv_out_reduced <- manyany_obs(fn = "glm", data = model_dat.reduced, 
                                 formula = model_formula.reduced , #Note here the call is updated
-                                family = statmod::tweedie(var.power = as.numeric(t_profile$xi.max), link.power = 0), 
-                                var.power = as.numeric(t_profile$xi.max),
+                                family = statmod::tweedie(var.power = as.numeric( t_profile$xi.max), link.power = 0), 
+                                var.power = as.numeric( t_profile$xi.max),
                                 control = list(maxit = 10000), get.what = "models")
   
   #Prepare for anova
@@ -110,14 +110,16 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
   } else CTRL <- permute::how(blocks = model_dat$block, within = permute::Within(type = "free")) 
   perm <- permute::shuffleSet(nset = n_permutations, n = nrow(model_dat), control = CTRL) #one minute to do 5, 13 minutes to do 100.
   
-  anova_out <- anova_obs(mv_out_reduced, mv_out_full, bootID = perm, p.uni = "unadjusted")
+  print(paste0(now(), ": starting anova out"))
+  anova_out <- anova_obs_dd(mv_out_reduced, mv_out_full, bootID = perm, p.uni = "unadjusted", nCores=1)
+  print(paste0(now(), ": ending anova out"))
   
   # Outputs ---- 
   
   return(
     results = list(
       ps = data.frame(t(anova_out$uni.p), p=anova_out$p),
-      xi.max = t_profile$xi.max,
+      xi.max =  t_profile$xi.max,
       aov_p = aov_p
     )
   )
@@ -126,7 +128,7 @@ mvglm_obs_dd <- function(x, add_var = NULL, block = NULL, n_permutations, xi.vec
   #   list(
   #     tweedie_profile = list(xi.max = t_profile$xi.max,
   #                            L.max = t_profile$L.max,
-  #                            x = t_profile$x, 
+  #                            x = t_profile$x,
   #                            y = t_profile$y
   #     ),
   #     model_aov = list(
