@@ -1,3 +1,10 @@
+# Craig.Faunce@noaa.gov
+# January 2026
+
+# The goal of this script is to generate simulated populations of different species that have a pre-specified
+# Berger parker index (dominance) and number of species for use in testing mvobservr.
+# This version was passed to Debra Duarte and was eventually incorporated into the main script.
+
 # Load necessary libraries for plotting and the Tweedie distribution.
 # If you don't have them installed, run:
 # install.packages("ggplot2")
