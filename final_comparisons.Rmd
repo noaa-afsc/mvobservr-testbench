@@ -92,7 +92,7 @@ trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
 # Set target coverage rate
 trip_coverage <- 0.25
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
-bias <- c(0, -0.10) #-0.25, -0.10, -0.40
+bias <- c(0, -0.40) #-0.25, -0.10, -0.40
 
 trip_sets_adj <- map(trip_sets, ~{.x %>%
   mutate(obs = rbinom(nrow(.), 1, trip_coverage)) %>%
@@ -131,7 +131,7 @@ res_t %>%
 
 ## univariate glmm
 ```{r}
-res_g <- map(trip_sets_adj, ~runGLMM(.x, "biomass_total"), .progress = TRUE)
+res_g <- map(trip_sets_adj, ~runGLMM(.x, "biomass_total"))
 res_g <- list_rbind(res_g, names_to = "set")
 res_g
 
@@ -161,7 +161,7 @@ res_p <- map(trip_sets_adj, ~{
   Y <- .x %>% dplyr::select(starts_with("sp_"))
   adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = 1000, method="euclidean")
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
-}, .progress=TRUE) #45min for 500
+}, .progress=TRUE) #15min for 500
 res_p <- list_rbind(res_p, names_to = "set")
 res_p
 
@@ -173,7 +173,7 @@ res_p %>%
 
 save all but mvglm
 ```{r}
-save(trip_sets, trip_sets_adj, res_g, res_p, res_t, res_tt, file="output_data/allbutmv_b10_set2.Rdata")
+save(trip_sets, trip_sets_adj, res_g, res_p, res_t, res_tt, file="output_data/allbutmv_b40_set2.Rdata")
 ```
 
 
@@ -200,7 +200,7 @@ res_m %>%
   group_by(bp_level) %>% 
   summarize(mean(mvglm_p<0.05))
 
-save(res_m, file="output_data/mvglmloop_b10_set2.Rdata")
+save(res_m, file="output_data/mvglmloop_b40_set2.Rdata")
 ```
 
 
