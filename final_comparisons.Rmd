@@ -57,7 +57,8 @@ n_samples_per_level * length(target_bp_levels)
 
 ```{r generatedata}
 # for reproducibility
-set.seed(123)
+#set.seed(123) #first 100 reps
+set.seed(456)  #second 100 reps
 
 trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
   #set up data frame for trips
@@ -91,7 +92,7 @@ trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
 # Set target coverage rate
 trip_coverage <- 0.25
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
-bias <- c(0, -0.40) #-0.25, -0.10, -0.40
+bias <- c(0, -0.10) #-0.25, -0.10, -0.40
 
 trip_sets_adj <- map(trip_sets, ~{.x %>%
   mutate(obs = rbinom(nrow(.), 1, trip_coverage)) %>%
@@ -170,6 +171,13 @@ res_p %>%
   summarize(mean(perma_p<0.05))
 ```
 
+save all but mvglm
+```{r}
+save(trip_sets, trip_sets_adj, res_g, res_p, res_t, res_tt, file="output_data/allbutmv_b10_set2.Rdata")
+```
+
+
+
 ##mvglm
 ```{r}
 res_m <- imap(1:length(trip_sets_adj), ~{
@@ -187,44 +195,21 @@ res_m <- list_rbind(res_m, names_to = "set") %>%
   filter(metric == "biomass_total")
 res_m
 
-save(res_m, file="output_data/mvglmloop_b40.Rdata")
+res_m %>% 
+  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(mvglm_p<0.05))
+
+save(res_m, file="output_data/mvglmloop_b10_set2.Rdata")
 ```
-
-
-```{r}
-load("output_data/mvglmloop1.Rdata")
-res_mc <- res_m
-load("output_data/mvglmloop2.Rdata")
-res_m$set <- res_m$set + nrow(res_mc) #increment set due to segmented runs
-res_mc <- bind_rows(res_mc, res_m)
-load("output_data/mvglmloop3.Rdata")
-res_m$set <- res_m$set + nrow(res_mc) #increment set due to segmented runs
-res_mc <- bind_rows(res_mc, res_m)
-load("output_data/mvglmloop4.Rdata")
-res_m$set <- res_m$set + nrow(res_mc) #increment set due to segmented runs
-res_mc <- bind_rows(res_mc, res_m)
-load("output_data/mvglmloop5.Rdata")
-res_m$set <- res_m$set + nrow(res_mc) #increment set due to segmented runs
-res_mc <- bind_rows(res_mc, res_m)
-load("output_data/mvglmloop6.Rdata")
-res_m$set <- res_m$set + nrow(res_mc) #increment set due to segmented runs
-res_mc <- bind_rows(res_mc, res_m)
-load("output_data/mvglmloop7.Rdata")
-res_m$set <- res_m$set + nrow(res_mc) #increment set due to segmented runs
-res_mc <- bind_rows(res_mc, res_m)
-res_m <- res_mc
-
-nrow(res_m)
-count(res_m, set) %>% filter(n > 1)
-```
-
-
-
 
 
 
 ## combine all tests
 ```{r}
+load(file="output_data/mvglmloop_b25_set2.Rdata")
+load(file="output_data/allbutmv_b25_set2.Rdata")
+
 res_comb <- map(trip_sets_adj, ~{
         .x %>%
           summarize(bp_level = max(bp_level), bp_true = max(bp_true), cov = mean(obs), sp1 = sum(sp_1), sp2 = sum(sp_2))
@@ -237,14 +222,22 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_m, by="set")
 res_comb
 
-save(res_comb, file="output_data/alltests_2spp_oe40_cov25.Rdata")
+save(res_comb, file="output_data/alltests_2spp_oe25_cov25_set2.Rdata")
+```
+
+###combine data from multiple sets
+```{r}
+load("output_data/alltests_2spp_oe25_cov25.Rdata")
+r1 <- res_comb
+load("output_data/alltests_2spp_oe25_cov25_set2.Rdata")
+r2 <- res_comb
+res_comb <- bind_rows(r1, r2)
+rm(r1, r2); gc #remove temp objects and clean up
 ```
 
 
+##figure: power of all tests vs dominance for one level of bias
 ```{r}
-#load("output_data/alltests_2spp_oe25_cov25.Rdata")
-#load("output_data/alltests_2spp_oe05_cov25.Rdata")
-#load("output_data/alltests_2spp_oe40_cov25.Rdata")
 res_comb %>%
   #assign_sig() %>%
   mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
@@ -274,32 +267,19 @@ res_comb %>%
   scale_y_continuous(labels=scales::label_percent(), limits=c(0,1))
 ```
 
-
+###check bias
 ```{r}
 res_comb %>%
   mutate(sp2_orig = 1000000-sp1, 
          sp2_bias = (sp2-sp2_orig)/sp2_orig,
          .before = "tstat") %>%
-  ggplot(aes(x=sp2_bias/0.25)) + geom_histogram()
+  ggplot(aes(x=sp2_bias/0.25)) + #divide by coverage rate
+  geom_histogram()
 ```
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+##figure: relative power of mvglm and permanova vs dominance for one level of bias
 ```{r}
 res_comb %>%
   #assign_sig() %>%
@@ -323,7 +303,7 @@ res_comb %>%
 
 
 
-
+##figure: power of 3 tests vs dominance w/ bootstrap error ribbons for one level of bias
 ```{r}
 bootstrap_size = 100
 n_bootstraps = 500
@@ -371,20 +351,44 @@ res_comb %>%
 
 
 
+#compare bias levels
 
+##combine datasets
 ```{r}
+#bias 25
 load("output_data/alltests_2spp_oe25_cov25.Rdata")
+r1 <- res_comb
+load("output_data/alltests_2spp_oe25_cov25_set2.Rdata")
+r2 <- res_comb %>% mutate(set = set + max(r1$set))
+res_comb <- bind_rows(r1, r2)
+rm(r1, r2); gc #remove temp objects and clean up
 res_oe <- res_comb %>% mutate(effsize = 25)
+
+#bias 10
 load("output_data/alltests_2spp_oe10_cov25.Rdata")
+r1 <- res_comb
+load("output_data/alltests_2spp_oe10_cov25_set2.Rdata")
+r2 <- res_comb %>% mutate(set = set + max(r1$set))
+res_comb <- bind_rows(r1, r2)
+rm(r1, r2); gc #remove temp objects and clean up
 res_oe <- res_oe %>%
   bind_rows(res_comb %>% mutate(effsize = 10))
+
+#bias 40
 load("output_data/alltests_2spp_oe40_cov25.Rdata")
+r1 <- res_comb
+load("output_data/alltests_2spp_oe40_cov25_set2.Rdata")
+r2 <- res_comb %>% mutate(set = set + max(r1$set))
+res_comb <- bind_rows(r1, r2)
+rm(r1, r2); gc #remove temp objects and clean up
 res_oe <- res_oe %>%
   bind_rows(res_comb %>% mutate(effsize = 40))
 
 table(res_oe$effsize, res_oe$bp_level)
 ```
 
+
+##figure: relative power for mvglm and permanova vs dominance for 3 levels of bias
 ```{r}
 res_oe %>%
   mutate(
@@ -407,7 +411,7 @@ res_oe %>%
 
 
 
-
+##figure: power of 3 tests vs bias w/ bootstrap error ribbons faceted by dominance
 ```{r, fig.width=8}
 bootstrap_size = 100
 n_bootstraps = 500
@@ -496,169 +500,58 @@ res_oe %>%
 
 
 
-
-
-
-
-
+#real data
+##alaska
 ```{r}
-set.seed(123)
-# Set target coverage rate
-trip_coverage <- 0.25
-# Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
-bias <- c(0, -0.05)
+load("source_data/1_mvglm_obs_data_segmented.Rdata") #original data
 
-trip_sets_adj2 <- map(trip_sets, ~{.x %>%
-  mutate(obs = rbinom(nrow(.), 1, trip_coverage)) %>%
-  mutate(sp_1 = ifelse(obs == 1, sp_1 * (1+bias[1]), sp_1),
-         sp_2 = ifelse(obs == 1, sp_2 * (1+bias[2]), sp_2),
-         biomass_total = sp_1 + sp_2
-         )
-}, .progress = TRUE)
+model_start <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
+                       select(STRATA, Species) %>% distinct()) %>%
+  select(species = Species, uid = TRIP_ID, days.fished, observed = OBSERVED_FLAG, biomass = Biomass, BLOCK, days.fished, STRATA)
 
-bias <- c(0, -0.5)
-
-trip_sets_adj3 <- map(trip_sets, ~{.x %>%
-  mutate(obs = rbinom(nrow(.), 1, trip_coverage)) %>%
-  mutate(sp_1 = ifelse(obs == 1, sp_1 * (1+bias[1]), sp_1),
-         sp_2 = ifelse(obs == 1, sp_2 * (1+bias[2]), sp_2),
-         biomass_total = sp_1 + sp_2
-         )
-}, .progress = TRUE)
+model_start.l <- split(model_start, f = ~ STRATA) #6 strata
 ```
 
+```{r}
+res_ak_oth <- map(model_start.l, ~{
+  dat <- .x %>%
+    group_by(uid, observed) %>%
+    summarize(biomass_total = sum(biomass), .groups="drop") %>%
+    mutate(obs = ifelse(observed == "Y", 1, 0), 
+           vessnum = sample(5, size=nrow(.), replace=TRUE)
+           )
+  
+  tres <- runTandFtests(dat, "biomass_total")
+  gres <- runGLMM(dat, "biomass_total")
+  mres <- TripletAnalysis(dat, "biomass_total", bootstrap_reps = 1000)
+  
+  
+  adon_formula = "Y~factor(obs)"
+  dat2 <- .x %>%
+    select(uid, obs = observed, species, biomass) %>%
+    pivot_wider(names_from = species, values_from = biomass, values_fill=0)
+  Y <- dat2 %>% dplyr::select(-c(uid, obs))
+  adon <- vegan::adonis2(as.formula(adon_formula), data = dat, permutations = 1000, method="euclidean")
+  pres <- data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
+  
+  cbind(tres, gres, mres, pres)
+})
 
+```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-simulated data does not have block or additional variable 
-```{r calculate_stats}
-system.time(r <- ObserverEffectStats(trip_sets_adj[[1]], metrics = c("sp_1", "sp_2", "biomass_total"),
-                      nperm_mvglm = 100, nboot_triplet = 30, nperm_adon = 30, mv_block = "vessnum")); r
-#10, 30, 30 = 67s
-#10, 30, 300 = 80s
-#10, 300, 30 = 71s
-#10, 300, 300 = 83s
-#100, 30, 30 = 608s
-#same but 500 trips instead of 1000 = 263s 
-#before chatgpt replace = 336s (500, 100, 30, 30); after = 185s (mostly from qtweedie improvement)
-  #6s for np = 3, 53s for np = 30, 247s for np = 100
-
-
-set.seed(123)
-stats_sets <- map(trip_sets_adj, ~{
-  ObserverEffectStats(.x, metrics = c("sp_1", "sp_2", "biomass_total"),
-                      nperm_mvglm = 200, nboot_triplet = 300, nperm_adon = 300,
-                      #mv_block = "vessnum"
-                      )
-}, .progress = TRUE)
-#6:47, 
-now()
-
-save(stats_sets, file="output_data/stat_sets_20251211.Rdata")
+```{r}
+model_start.l[[1]] %>%
+  select(uid, obs = observed, species, biomass) %>%
+  pivot_wider(names_from = species, values_from = biomass, values_fill=0)
 ```
 
 
 ```{r}
-stats_sets %>%
-  list_rbind(names_to = "set") %>%
-  mutate(bp_true = sum_O/(sum_O + sum_U)) %>%
-  select(set, metric, mvglm_p, perma_p, tp)
-
-map(trip_sets_adj, ~{
-        .x %>%
-          summarize(bp_level = max(bp_level), bp_true = max(bp_true), cov = mean(obs))
-    }) %>%
-  list_rbind(names_to = "set") %>%
-  left_join (
-    stats_sets %>%
-      list_rbind(names_to = "set")
-    , by = "set"
-  ) %>%
-  assign_sig() %>%
-  filter(!is.na(metric)) %>%
-  group_by(bp_level, metric) %>%
-  summarize(across(ends_with("sig"), ~mean(.x, na.rm=TRUE)), .groups="drop") %>%
-  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
-  ggplot(aes(x=bp_level, y=pctsig, col=test)) +
-  geom_line() +
-  facet_wrap(~metric) +
-  labs(title = "30 reps, 50% bias on sp2")
-```
-
-
-
-
-
-
-
-```{r}
-system.time(r <- trip_sets_adj[[3]] %>%
-      mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
-      pivot_longer(cols=starts_with("sp_"),
-                   names_to = 'species', values_to = 'biomass') %>%
-      mvglm_obs(block = NULL, add_var = NULL, n_permutations=1,
+res_ak_mv <- map(model_start.l, ~{
+  mvglm_obs(.x, block = NULL, add_var = NULL, n_permutations=1,
                 xi.vec = seq(1.2, 1.8, length.out=5))
-)
+})
 
-system.time(r <- trip_sets_adj[[3]] %>%
-      mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
-      pivot_longer(cols=starts_with("sp_"),
-                   names_to = 'species', values_to = 'biomass') %>%
-      mvglm_obs_dd(block = NULL, add_var = NULL, n_permutations=1,
-                xi.vec = seq(1.2, 1.8, length.out=5))
-)
+res_ak_mv$`EM FIXED BSAI`$results$p
 ```
-
-
-
-
-
 
