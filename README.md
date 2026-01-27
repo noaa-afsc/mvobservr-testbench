@@ -3,7 +3,7 @@
 The primary author(s) responsible for maintaining this repository are:
 * Craig H. Faunce (craig.faunce@noaa.gov)
 * Debra Duarte (debra.duarte@noaa.gov)
-* Geoff Mayhew (NOAA-AFSC)
+* Geoff Mayhew (geoff.mayhew@noaa.gov)
 
 # Description
 Addressing observer effects, wherein the act of observation has influence on the phenomenon being observed, is of great importance to science because its presence indicates that the results from data collected from observation (the sample) are biased and cannot be used to infer the properties of unobserved nature (the population). The presence of an observer effect in partial coverage fisheries means that the data from monitored trips (the sample) are not representative of the entire fleet (the population), and this bias can have broad implications to catch accounting and stock assessments.
