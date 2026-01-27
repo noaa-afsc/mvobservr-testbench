@@ -8,6 +8,7 @@ Problem statement: species do not always have constant observer effects - relati
 Goal: test a new method to do multivariate analysis on species catches and compare these results to those derived from alternative multivariate and single species or univariate approaches.  We do this over multiple degrees of species interactions (dominance) and degrees of bias (observer effects). 
 
 
+#setup
 
 ```{r packages}
 library(tidyverse)
@@ -200,15 +201,15 @@ res_m %>%
   group_by(bp_level) %>% 
   summarize(mean(mvglm_p<0.05))
 
-save(res_m, file="output_data/mvglmloop_b10_set2.Rdata")
+save(res_m, file="output_data/mvglmloop_b40_set2.Rdata")
 ```
 
 
 
 ## combine all tests
 ```{r}
-load(file="output_data/mvglmloop_b25_set2.Rdata")
-load(file="output_data/allbutmv_b25_set2.Rdata")
+load(file="output_data/mvglmloop_b40_set2.Rdata")
+load(file="output_data/allbutmv_b40_set2.Rdata")
 
 res_comb <- map(trip_sets_adj, ~{
         .x %>%
@@ -222,14 +223,14 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_m, by="set")
 res_comb
 
-save(res_comb, file="output_data/alltests_2spp_oe25_cov25_set2.Rdata")
+save(res_comb, file="output_data/alltests_2spp_oe40_cov25_set2.Rdata")
 ```
 
 ###combine data from multiple sets
 ```{r}
-load("output_data/alltests_2spp_oe25_cov25.Rdata")
+load("output_data/alltests_2spp_oe40_cov25.Rdata")
 r1 <- res_comb
-load("output_data/alltests_2spp_oe25_cov25_set2.Rdata")
+load("output_data/alltests_2spp_oe40_cov25_set2.Rdata")
 r2 <- res_comb
 res_comb <- bind_rows(r1, r2)
 rm(r1, r2); gc #remove temp objects and clean up
@@ -443,7 +444,7 @@ res_oe %>%
   group_by(bin, effsize, test) %>%
   summarize(meansig = mean(pctsig), lo = quantile(pctsig,0.025), hi = quantile(pctsig, 0.975), .groups="drop") %>%
   filter(test %in% c('MV GLM','permanova','uni. GLMM')) %>%
-  mutate(bp_level = as.numeric(as.character(bin))) %>%
+  mutate(bp_level = paste0("BP: ", as.numeric(as.character(bin))*100, "%")) %>%
   #ggplot(aes(x=bp_level, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
   ggplot(aes(x=effsize/100, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
   geom_line(linewidth = 1) +
@@ -456,7 +457,7 @@ res_oe %>%
       x = "observer effect size",
        y="% of simulations with positive (significant) result",
        title = "power of tests on total biomass",
-       subtitle = "25% coverage; 10, 25, or 40% reduction on catch of species 2 when observed"
+       subtitle = "25% coverage; 10, 25, or 40% reduction on catch of species 2 when observed \n 200 reps per data point"
   ) +
   scale_x_continuous(labels=scales::label_percent()) +
   scale_y_continuous(labels=scales::label_percent(), limits=c(0,1)) +
@@ -464,6 +465,37 @@ res_oe %>%
   facet_wrap(~bp_level)
 ```
 
+##figure: power of all tests for 3 bias levels
+```{r}
+res_oe %>%
+  mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
+           f_test_sig = ifelse(Fp < 0.05, 1, 0),
+           dAIC_sig = ifelse(glmmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+           median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
+           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+    ) %>%
+  group_by(effsize, bp_level) %>%
+  summarize(across(ends_with("sig"), ~mean(.x, na.rm=TRUE)), .groups="drop") %>%
+  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
+  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+                       ordered = TRUE,
+                       labels = c("t-test", "F test", "uni. GLMM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+  mutate(effsize = paste0(effsize, "% observer effect")) %>%
+  ggplot(aes(x=bp_level, y=pctsig, col=test)) +
+  geom_line(linewidth=1) +
+  scale_color_brewer(palette = 'Set2') +
+  theme_bw() +
+  labs(x="% dominance by species 1",
+       y="% of simulations with positive (significant) result",
+       title = "power of tests on total biomass",
+       subtitle = "25% coverage, reduction on catch of species 2 when observed, 200 reps"
+  ) +
+  scale_x_continuous(labels=scales::label_percent()) +
+  scale_y_continuous(labels=scales::label_percent(), limits=c(0,1)) +
+  facet_wrap(~effsize)
+```
 
 
 
