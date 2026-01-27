@@ -6,7 +6,7 @@ output: html_notebook
 Problem statement: species do not always have constant observer effects - relative biomass can mask effects on non-dominant species.
 
 Goal: test a new method to do multivariate analysis on species catches and compare these results to those derived from alternative multivariate and single species or univariate approaches.  We do this over multiple degrees of species interactions (dominance) and degrees of bias (observer effects). 
-
+this is a test
 
 #setup
 
