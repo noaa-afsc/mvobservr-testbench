@@ -52,14 +52,31 @@ target_bp_levels <- seq(0.5, 0.9, by = 0.1)
 
 # total datasets to create
 n_samples_per_level * length(target_bp_levels)
+
+# Set the destination folder for data outputs on the Google shared drive
+output_dribble <- gdrive_set_dribble("Projects/MVGLM-OBS/final_comparisons")
+```
+
+```{r set setup}
+# Set number (results in a separate seed)
+set_number <- 2  # 1 or 2
+# Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
+bias <- c(0, -0.10) #-0.25, -0.10, -0.40
+# Set target coverage rate
+trip_coverage <- 0.25
+
 ```
 
 
 
 ```{r generatedata}
 # for reproducibility
-#set.seed(123) #first 100 reps
-set.seed(456)  #second 100 reps
+
+if(set_number == 1) {
+  set.seed(123)
+} else if(set_number == 2) {
+  set.seed(456)
+} else stop("'set_number' needs to be specified as '1' or '2'!")
 
 trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
   #set up data frame for trips
@@ -90,10 +107,6 @@ trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
 
 
 ```{r addbias}
-# Set target coverage rate
-trip_coverage <- 0.25
-# Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
-bias <- c(0, -0.10) #-0.25, -0.10, -0.40
 
 trip_sets_adj <- map(trip_sets, ~{.x %>%
   mutate(obs = rbinom(nrow(.), 1, trip_coverage)) %>%
@@ -132,7 +145,7 @@ res_t %>%
 
 ## univariate glmm
 ```{r}
-res_g <- map(trip_sets_adj, ~runGLMM(.x, "biomass_total"), .progress = TRUE)
+res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
 res_g <- list_rbind(res_g, names_to = "set")
 res_g
 
@@ -174,7 +187,10 @@ res_p %>%
 
 save all but mvglm
 ```{r}
-save(trip_sets, trip_sets_adj, res_g, res_p, res_t, res_tt, file="output_data/allbutmv_b10_set2.Rdata")
+allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
+save(trip_sets, trip_sets_adj, res_g, res_p, res_t, res_tt, file = allbutmv_name)
+# Upload to the Google Shared Drive
+gdrive_upload(allbutmv_name, output_dribble)
 ```
 
 
@@ -201,15 +217,18 @@ res_m %>%
   group_by(bp_level) %>% 
   summarize(mean(mvglm_p<0.05))
 
-save(res_m, file="output_data/mvglmloop_b40_set2.Rdata")
+# Save and upload the results
+mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
+save(res_m, file = mvglm_name)
+gdrive_upload(mvglm_name, output_dribble)
 ```
 
 
 
 ## combine all tests
 ```{r}
-load(file="output_data/mvglmloop_b40_set2.Rdata")
-load(file="output_data/allbutmv_b40_set2.Rdata")
+load(gdrive_download(mvglm_name, output_dribble))
+load(gdrive_download(allbutmv_name, output_dribble))
 
 res_comb <- map(trip_sets_adj, ~{
         .x %>%
@@ -223,14 +242,18 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_m, by="set")
 res_comb
 
-save(res_comb, file="output_data/alltests_2spp_oe40_cov25_set2.Rdata")
+alltests_name <- paste0("output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set", set_number, ".Rdata")
+save(res_comb, file = paste0(alltests_name, set_number, ".Rdata"))
+gdrive_upload(alltests_name, output_dribble)
 ```
 
 ###combine data from multiple sets
 ```{r}
-load("output_data/alltests_2spp_oe40_cov25.Rdata")
+
+alltests_name.set <- paste0("output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set")
+load(gdrive_download(paste0(alltests_name.set, 1, ".Rdata"), output_dribble))
 r1 <- res_comb
-load("output_data/alltests_2spp_oe40_cov25_set2.Rdata")
+load(gdrive_download(paste0(alltests_name.set, 2, ".Rdata"), output_dribble))
 r2 <- res_comb
 res_comb <- bind_rows(r1, r2)
 rm(r1, r2); gc #remove temp objects and clean up
@@ -357,18 +380,18 @@ res_comb %>%
 ##combine datasets
 ```{r}
 #bias 25
-load("output_data/alltests_2spp_oe25_cov25.Rdata")
+load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set1.Rdata"), output_dribble)
 r1 <- res_comb
-load("output_data/alltests_2spp_oe25_cov25_set2.Rdata")
+load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set2.Rdata"), output_dribble)
 r2 <- res_comb %>% mutate(set = set + max(r1$set))
 res_comb <- bind_rows(r1, r2)
 rm(r1, r2); gc #remove temp objects and clean up
 res_oe <- res_comb %>% mutate(effsize = 25)
 
 #bias 10
-load("output_data/alltests_2spp_oe10_cov25.Rdata")
+load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set1.Rdata"), output_dribble)
 r1 <- res_comb
-load("output_data/alltests_2spp_oe10_cov25_set2.Rdata")
+load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set2.Rdata"), output_dribble)
 r2 <- res_comb %>% mutate(set = set + max(r1$set))
 res_comb <- bind_rows(r1, r2)
 rm(r1, r2); gc #remove temp objects and clean up
@@ -376,9 +399,9 @@ res_oe <- res_oe %>%
   bind_rows(res_comb %>% mutate(effsize = 10))
 
 #bias 40
-load("output_data/alltests_2spp_oe40_cov25.Rdata")
+load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set1.Rdata"), output_dribble)
 r1 <- res_comb
-load("output_data/alltests_2spp_oe40_cov25_set2.Rdata")
+load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set2.Rdata"), output_dribble)
 r2 <- res_comb %>% mutate(set = set + max(r1$set))
 res_comb <- bind_rows(r1, r2)
 rm(r1, r2); gc #remove temp objects and clean up
