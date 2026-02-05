@@ -3,6 +3,4 @@
 *.RData
 .Ruserdata
 *.html
-/output_data
-/source_data
 *.Rdat
