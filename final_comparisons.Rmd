@@ -1,0 +1,612 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Problem statement: species do not always have constant observer effects - relative biomass can mask effects on non-dominant species.
+
+Goal: test a new method to do multivariate analysis on species catches and compare these results to those derived from alternative multivariate and single species or univariate approaches.  We do this over multiple degrees of species interactions (dominance) and degrees of bias (observer effects). 
+this is a test
+
+#setup
+
+```{r packages}
+library(tidyverse)
+library(FMAtools)  
+library(mvobservr)
+library(lme4)
+library(tweedie)
+
+source("functions/triplet_stats.R")
+source("functions/TripletAnalysis.R")
+source("functions/getDescriptiveStats.R")
+source("functions/runTandFtests.R")
+source("functions/runGLMM.R")
+source("functions/assign_sig.R")
+source("functions/ObserverEffectStats.R")
+source("functions/mvglm_obs_dd.R")
+source("functions/anova_obs_dd.R")
+source("functions/bootAnova_obs_dd.R")
+source("functions/qtweedie_obs_dd.R")
+```
+
+
+```{r simulation_setup}
+# Set how many populations per scenario to generate
+n_samples_per_level <- 100
+# Set the Tweedie power parameter (lambda). 1 < p < 2 is typical for biomass.
+tweedie_power <- 1.6
+# Set the dispersion parameter for the Tweedie distribution.
+# Higher values create more variance (further from target BP).
+phi <- 3
+
+# Set the desired total biomass for every saved population.
+fixed_total_biomass <- 1000000
+# Set the number of vessels in the fleet
+# Vessel needs to be defined for some of the analyses
+nvess <- 20
+# Set the number of trips 
+ntrips <- 500
+# Set target Berger-Parker index (dominance) levels.
+target_bp_levels <- seq(0.5, 0.9, by = 0.1)
+
+# total datasets to create
+n_samples_per_level * length(target_bp_levels)
+
+# Set the destination folder for data outputs on the Google shared drive
+output_dribble <- gdrive_set_dribble("Projects/MVGLM-OBS/final_comparisons")
+```
+
+```{r set setup}
+# Set number (results in a separate seed)
+set_number <- 2  # 1 or 2
+# Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
+bias <- c(0, -0.10) #-0.25, -0.10, -0.40
+# Set target coverage rate
+trip_coverage <- 0.25
+
+```
+
+
+
+```{r generatedata}
+# for reproducibility
+
+if(set_number == 1) {
+  set.seed(123)
+} else if(set_number == 2) {
+  set.seed(456)
+} else stop("'set_number' needs to be specified as '1' or '2'!")
+
+trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
+  #set up data frame for trips
+  catches <- data.frame(uid = 1:ntrips)
+  
+  #create catches
+  catches$sp_1 <- rtweedie(ntrips, p = tweedie_power, mu = 100*target_bp_levels[.x], phi = phi)
+  catches$sp_2 <- rtweedie(ntrips, p = tweedie_power, mu = 100*(1-target_bp_levels[.x]), phi = phi)
+  # the 100 acts as a raising factor to get away from a lot of 0s
+  
+  #standardize catches
+  catches <- catches %>%
+    mutate(total_biomass = sum(sp_1 + sp_2)) %>%
+    mutate(scalar = fixed_total_biomass/total_biomass) %>%
+    mutate(across(c(sp_1, sp_2), function(x) x*scalar)) %>%
+    select(-scalar, -total_biomass) %>%
+    mutate(biomass_total = sp_1 + sp_2) %>% #this is at the trip level, previously was at the fleet level
+    mutate(bp_level = target_bp_levels[.x],
+           bp_true = sum(sp_1)/sum(biomass_total))
+  
+  #add vessel randomly
+  catches <- catches %>%
+    mutate(vessnum = sample(nvess, size=nrow(.), replace=TRUE)) 
+  
+}, .progress = TRUE)
+
+```
+
+
+```{r addbias}
+
+trip_sets_adj <- map(trip_sets, ~{.x %>%
+  mutate(obs = rbinom(nrow(.), 1, trip_coverage)) %>%
+  mutate(sp_1 = ifelse(obs == 1, sp_1 * (1+bias[1]), sp_1),
+         sp_2 = ifelse(obs == 1, sp_2 * (1+bias[2]), sp_2),
+         biomass_total = sp_1 + sp_2
+         )
+}, .progress = TRUE)
+
+map(trip_sets_adj, ~{
+  .x %>%
+    summarize(sp2 = mean(sp_2), sp2unobs = mean(ifelse(obs==0, sp_2, NA), na.rm=TRUE),
+              sp2obs = mean(ifelse(obs==1, sp_2, NA), na.rm=TRUE))
+}) %>%
+  list_rbind() %>%
+  mutate(b = (sp2obs-sp2unobs)/sp2unobs) %>%
+  ggplot(aes(x=b)) + geom_histogram()
+```
+
+
+# run tests separately for time reasons
+just run on total biomass 
+
+## t and f
+```{r}
+res_t <- map(trip_sets_adj, ~runTandFtests(.x, "biomass_total"))
+res_t <- list_rbind(res_t, names_to = "set")
+res_t
+
+res_t %>% 
+  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(tp < 0.05), mean(Fp < 0.05))
+
+```
+
+## univariate glmm
+```{r}
+res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
+res_g <- list_rbind(res_g, names_to = "set")
+res_g
+
+res_g %>% 
+  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(AICd>2))
+```
+
+## triplet
+```{r}
+res_tt <- map(trip_sets_adj, ~TripletAnalysis(.x, "biomass_total", bootstrap_reps = 1000), .progress = TRUE) #about 5 min for 500
+res_tt <- list_rbind(res_tt, names_to = "set")
+res_tt
+
+res_tt %>% 
+  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(KSp < 0.05), mean(ci_lo > 0 | ci_hi < 0))
+```
+
+##permanova
+```{r}
+adon_formula = "Y~factor(obs)"
+
+res_p <- map(trip_sets_adj, ~{
+  Y <- .x %>% dplyr::select(starts_with("sp_"))
+  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = 1000, method="euclidean")
+  data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
+}, .progress=TRUE) #45min for 500
+res_p <- list_rbind(res_p, names_to = "set")
+res_p
+
+res_p %>% 
+  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(perma_p<0.05))
+```
+
+save all but mvglm
+```{r}
+allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
+save(trip_sets, trip_sets_adj, res_g, res_p, res_t, res_tt, file = allbutmv_name)
+# Upload to the Google Shared Drive
+gdrive_upload(allbutmv_name, output_dribble)
+```
+
+
+
+##mvglm
+```{r}
+res_m <- imap(1:length(trip_sets_adj), ~{
+  print(paste0("***set ", .x, " ", now()))
+  trip_sets_adj[[.x]] %>%
+      mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
+      pivot_longer(cols=starts_with("sp_"),
+                   names_to = 'species', values_to = 'biomass') %>%
+      mvglm_obs_dd(block = NULL, add_var = NULL, n_permutations=100) %>%
+      pluck("ps") %>%
+      rename(biomass_total = p) %>%
+      pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
+}) #about 5s per permutation
+res_m <- list_rbind(res_m, names_to = "set") %>%
+  filter(metric == "biomass_total")
+res_m
+
+res_m %>% 
+  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(mvglm_p<0.05))
+
+# Save and upload the results
+mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
+save(res_m, file = mvglm_name)
+gdrive_upload(mvglm_name, output_dribble)
+```
+
+
+
+## combine all tests
+```{r}
+load(gdrive_download(mvglm_name, output_dribble))
+load(gdrive_download(allbutmv_name, output_dribble))
+
+res_comb <- map(trip_sets_adj, ~{
+        .x %>%
+          summarize(bp_level = max(bp_level), bp_true = max(bp_true), cov = mean(obs), sp1 = sum(sp_1), sp2 = sum(sp_2))
+    }) %>%
+  list_rbind(names_to = "set") %>%
+  left_join(res_t, by="set") %>%
+  left_join(res_g, by="set") %>%
+  left_join(res_tt, by="set") %>%
+  left_join(res_p, by="set") %>%
+  left_join(res_m, by="set")
+res_comb
+
+alltests_name <- paste0("output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set", set_number, ".Rdata")
+save(res_comb, file = paste0(alltests_name, set_number, ".Rdata"))
+gdrive_upload(alltests_name, output_dribble)
+```
+
+###combine data from multiple sets
+```{r}
+
+alltests_name.set <- paste0("output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set")
+load(gdrive_download(paste0(alltests_name.set, 1, ".Rdata"), output_dribble))
+r1 <- res_comb
+load(gdrive_download(paste0(alltests_name.set, 2, ".Rdata"), output_dribble))
+r2 <- res_comb
+res_comb <- bind_rows(r1, r2)
+rm(r1, r2); gc #remove temp objects and clean up
+```
+
+
+##figure: power of all tests vs dominance for one level of bias
+```{r}
+res_comb %>%
+  #assign_sig() %>%
+  mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
+           f_test_sig = ifelse(Fp < 0.05, 1, 0),
+           dAIC_sig = ifelse(glmmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+           median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
+           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+    ) %>%
+  group_by(bp_level) %>%
+  summarize(across(ends_with("sig"), ~mean(.x, na.rm=TRUE)), .groups="drop") %>%
+  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
+  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+                       ordered = TRUE,
+                       labels = c("t-test", "F test", "uni. GLMM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+  ggplot(aes(x=bp_level, y=pctsig, col=test)) +
+  geom_line(linewidth=1) +
+  scale_color_brewer(palette = 'Set2') +
+  theme_bw() +
+  labs(x="% dominance by species 1",
+       y="% of simulations with positive (significant) result",
+       title = "power of tests on total biomass",
+       subtitle = "25% coverage, 25% reduction on catch of species 2 when observed"
+  ) +
+  scale_x_continuous(labels=scales::label_percent()) +
+  scale_y_continuous(labels=scales::label_percent(), limits=c(0,1))
+```
+
+###check bias
+```{r}
+res_comb %>%
+  mutate(sp2_orig = 1000000-sp1, 
+         sp2_bias = (sp2-sp2_orig)/sp2_orig,
+         .before = "tstat") %>%
+  ggplot(aes(x=sp2_bias/0.25)) + #divide by coverage rate
+  geom_histogram()
+```
+
+
+
+##figure: relative power of mvglm and permanova vs dominance for one level of bias
+```{r}
+res_comb %>%
+  #assign_sig() %>%
+  mutate(
+           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+    ) %>%
+  group_by(bp_level) %>%
+  summarize(across(ends_with("sig"), ~mean(.x, na.rm=TRUE)), .groups="drop") %>%
+  ggplot(aes(x=bp_level, y=mvglm_sig/perma_sig)) +
+  geom_line() +
+  theme_bw() +
+  labs(x="% dominance by species 1",
+       y="relative power (mvglm/permanova)",
+       title = "relative power of tests on total biomass",
+       subtitle = "25% coverage, 25% reduction on catch of species 2 when observed"
+  ) +
+  scale_x_continuous(labels=scales::label_percent())
+```
+
+
+
+
+##figure: power of 3 tests vs dominance w/ bootstrap error ribbons for one level of bias
+```{r}
+bootstrap_size = 100
+n_bootstraps = 500
+
+res_comb %>%
+  mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
+           f_test_sig = ifelse(Fp < 0.05, 1, 0),
+           dAIC_sig = ifelse(glmmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+           median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
+           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+    ) %>%
+  select(bp_level, ends_with("sig")) %>%
+  mutate(bin = as.factor(as.numeric(bp_level))) %>%
+  split(~bin) %>%
+  map(.x=., .f=~{slice_sample(.x, n=bootstrap_size*n_bootstraps, replace=TRUE) %>%
+      mutate(boot = rep(1:n_bootstraps, each=bootstrap_size)) %>%
+      group_by(bin, boot) %>%
+      summarize(across(ends_with("sig"), mean), 
+                .groups="drop")
+    }) %>%
+  list_rbind() %>%
+  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
+  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+                       ordered = TRUE,
+                       labels = c("t-test", "F test", "uni. GLMM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+  group_by(bin, test) %>%
+  summarize(meansig = mean(pctsig), lo = quantile(pctsig,0.025), hi = quantile(pctsig, 0.975), .groups="drop") %>%
+  filter(test %in% c('MV GLM','permanova','uni. GLMM')) %>%
+  ggplot(aes(x=as.numeric(bin), y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
+  geom_line() +
+  geom_ribbon(alpha = 0.2) +
+  scale_color_brewer(palette = 'Set2') +
+  scale_fill_brewer(palette = 'Set2') +
+  theme_bw() +
+  labs(x="% dominance by species 1",
+       y="% of simulations with positive (significant) result",
+       title = "power of tests on total biomass",
+       subtitle = "25% coverage, 25% reduction on catch of species 2 when observed"
+  ) +
+  scale_x_continuous(labels=scales::label_percent()) +
+  scale_y_continuous(labels=scales::label_percent(), limits=c(0,1)) 
+```
+
+
+
+#compare bias levels
+
+##combine datasets
+```{r}
+#bias 25
+load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set1.Rdata"), output_dribble)
+r1 <- res_comb
+load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set2.Rdata"), output_dribble)
+r2 <- res_comb %>% mutate(set = set + max(r1$set))
+res_comb <- bind_rows(r1, r2)
+rm(r1, r2); gc #remove temp objects and clean up
+res_oe <- res_comb %>% mutate(effsize = 25)
+
+#bias 10
+load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set1.Rdata"), output_dribble)
+r1 <- res_comb
+load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set2.Rdata"), output_dribble)
+r2 <- res_comb %>% mutate(set = set + max(r1$set))
+res_comb <- bind_rows(r1, r2)
+rm(r1, r2); gc #remove temp objects and clean up
+res_oe <- res_oe %>%
+  bind_rows(res_comb %>% mutate(effsize = 10))
+
+#bias 40
+load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set1.Rdata"), output_dribble)
+r1 <- res_comb
+load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set2.Rdata"), output_dribble)
+r2 <- res_comb %>% mutate(set = set + max(r1$set))
+res_comb <- bind_rows(r1, r2)
+rm(r1, r2); gc #remove temp objects and clean up
+res_oe <- res_oe %>%
+  bind_rows(res_comb %>% mutate(effsize = 40))
+
+table(res_oe$effsize, res_oe$bp_level)
+```
+
+
+##figure: relative power for mvglm and permanova vs dominance for 3 levels of bias
+```{r}
+res_oe %>%
+  mutate(
+           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+    ) %>%
+  group_by(bp_level, effsize) %>%
+  summarize(across(ends_with("sig"), ~mean(.x, na.rm=TRUE)), .groups="drop") %>%
+  ggplot(aes(x=bp_level, y=mvglm_sig/perma_sig, col=factor(effsize), group=effsize)) +
+  geom_line() +
+  theme_bw() +
+  labs(x="% dominance by species 1",
+       y="relative power (mvglm/permanova)",
+       title = "relative power of tests on total biomass",
+       subtitle = "25% coverage; 10, 25, or 40% reduction on catch of species 2 when observed",
+       col="observer effect size"
+  ) +
+  scale_x_continuous(labels=scales::label_percent())
+```
+
+
+
+##figure: power of 3 tests vs bias w/ bootstrap error ribbons faceted by dominance
+```{r, fig.width=8}
+bootstrap_size = 100
+n_bootstraps = 500
+
+res_oe %>%
+  mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
+           f_test_sig = ifelse(Fp < 0.05, 1, 0),
+           dAIC_sig = ifelse(glmmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+           median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
+           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+    ) %>%
+  select(effsize, bp_level, ends_with("sig")) %>%
+  mutate(bin = as.factor(as.numeric(bp_level))) %>%
+  split(~bin + effsize) %>%
+  map(.x=., ~{
+      slice_sample(.x, n=bootstrap_size*n_bootstraps, replace=TRUE) %>%
+      mutate(boot = rep(1:n_bootstraps, each=bootstrap_size)) %>%
+      group_by(bin, effsize, boot) %>%
+      summarize(across(ends_with("sig"), mean), 
+                .groups="drop")
+    }) %>%
+  list_rbind() %>%
+  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
+  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+                       ordered = TRUE,
+                       labels = c("t-test", "F test", "uni. GLMM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+  group_by(bin, effsize, test) %>%
+  summarize(meansig = mean(pctsig), lo = quantile(pctsig,0.025), hi = quantile(pctsig, 0.975), .groups="drop") %>%
+  filter(test %in% c('MV GLM','permanova','uni. GLMM')) %>%
+  mutate(bp_level = paste0("BP: ", as.numeric(as.character(bin))*100, "%")) %>%
+  #ggplot(aes(x=bp_level, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
+  ggplot(aes(x=effsize/100, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  geom_ribbon(alpha = 0.2) +
+  scale_color_brewer(palette = 'Set1') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_bw() +
+  labs(#x="% dominance by species 1",
+      x = "observer effect size",
+       y="% of simulations with positive (significant) result",
+       title = "power of tests on total biomass",
+       subtitle = "25% coverage; 10, 25, or 40% reduction on catch of species 2 when observed \n 200 reps per data point"
+  ) +
+  scale_x_continuous(labels=scales::label_percent()) +
+  scale_y_continuous(labels=scales::label_percent(), limits=c(0,1)) +
+  #facet_wrap(~effsize)
+  facet_wrap(~bp_level)
+```
+
+##figure: power of all tests for 3 bias levels
+```{r}
+res_oe %>%
+  mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
+           f_test_sig = ifelse(Fp < 0.05, 1, 0),
+           dAIC_sig = ifelse(glmmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+           median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
+           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+    ) %>%
+  group_by(effsize, bp_level) %>%
+  summarize(across(ends_with("sig"), ~mean(.x, na.rm=TRUE)), .groups="drop") %>%
+  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
+  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+                       ordered = TRUE,
+                       labels = c("t-test", "F test", "uni. GLMM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+  mutate(effsize = paste0(effsize, "% observer effect")) %>%
+  ggplot(aes(x=bp_level, y=pctsig, col=test)) +
+  geom_line(linewidth=1) +
+  scale_color_brewer(palette = 'Set2') +
+  theme_bw() +
+  labs(x="% dominance by species 1",
+       y="% of simulations with positive (significant) result",
+       title = "power of tests on total biomass",
+       subtitle = "25% coverage, reduction on catch of species 2 when observed, 200 reps"
+  ) +
+  scale_x_continuous(labels=scales::label_percent()) +
+  scale_y_continuous(labels=scales::label_percent(), limits=c(0,1)) +
+  facet_wrap(~effsize)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#real data
+##alaska
+```{r}
+load("source_data/1_mvglm_obs_data_segmented.Rdata") #original data
+
+model_start <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
+                       select(STRATA, Species) %>% distinct()) %>%
+  select(species = Species, uid = TRIP_ID, days.fished, observed = OBSERVED_FLAG, biomass = Biomass, BLOCK, days.fished, STRATA)
+
+model_start.l <- split(model_start, f = ~ STRATA) #6 strata
+```
+
+```{r}
+res_ak_oth <- map(model_start.l, ~{
+  dat <- .x %>%
+    group_by(uid, observed) %>%
+    summarize(biomass_total = sum(biomass), .groups="drop") %>%
+    mutate(obs = ifelse(observed == "Y", 1, 0), 
+           vessnum = sample(5, size=nrow(.), replace=TRUE)
+           )
+  
+  tres <- runTandFtests(dat, "biomass_total")
+  gres <- runGLMM(dat, "biomass_total")
+  mres <- TripletAnalysis(dat, "biomass_total", bootstrap_reps = 1000)
+  
+  
+  adon_formula = "Y~factor(obs)"
+  dat2 <- .x %>%
+    select(uid, obs = observed, species, biomass) %>%
+    pivot_wider(names_from = species, values_from = biomass, values_fill=0)
+  Y <- dat2 %>% dplyr::select(-c(uid, obs))
+  adon <- vegan::adonis2(as.formula(adon_formula), data = dat, permutations = 1000, method="euclidean")
+  pres <- data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
+  
+  cbind(tres, gres, mres, pres)
+})
+
+```
+
+```{r}
+model_start.l[[1]] %>%
+  select(uid, obs = observed, species, biomass) %>%
+  pivot_wider(names_from = species, values_from = biomass, values_fill=0)
+```
+
+
+```{r}
+res_ak_mv <- map(model_start.l, ~{
+  mvglm_obs(.x, block = NULL, add_var = NULL, n_permutations=1,
+                xi.vec = seq(1.2, 1.8, length.out=5))
+})
+
+res_ak_mv$`EM FIXED BSAI`$results$p
+```
+

@@ -2,6 +2,5 @@
 .Rhistory
 *.RData
 .Ruserdata
-*.Rdat
 *.html
-/output_data
+*.Rdat
