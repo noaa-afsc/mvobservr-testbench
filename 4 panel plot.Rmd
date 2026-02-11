@@ -77,12 +77,12 @@ metric_results %>%
   summarize(psig = mean(p<=0.05), .groups="drop") %>%
   mutate(value = case_when(
                          metric == "biomass" ~ log10(value), 
-                         metric == "cov" ~ value*100,
+                         metric == "cov" ~ value*500, #convert to number of trips
                          TRUE ~ value
                        ), 
          metric = factor(metric, levels = c("biomass", "cov", "phi", "trips"),
-                  labels = c("total biomass (log scale)", "coverage rate (% of trips)",
-                             "phi", "total fleet trips (N)")
+                  labels = c("total biomass (log scale)", "number of observed trips (out of 500 total)",
+                             "phi", "total fleet trips")
                         ),
          test = factor(test, levels = c("mvglm_p","perma_p"),
                        labels = c("MVGLM", "permanova")
@@ -97,9 +97,6 @@ metric_results %>%
        title = "Power vs. simulation parameters",
        subtitle = "50 replicates per value")
 ```
-
-
-
 
 
 
