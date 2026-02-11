@@ -3,20 +3,42 @@ title: "4 panel plot"
 output: html_notebook
 ---
 
-load files (ran on cloud and pulled down output files)
-**need to replace this with pull from google drive**
+#setup
 ```{r}
-load("output_data/from cloud workstation/rescomb_phi.Rdata")
+library(tidyverse)
+library(FMAtools)
+```
+
+
+#upload files to gdrive
+  only once when transferring from data ran on cloud workstation
+```{r}
+mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
+save_name <- paste0("output_data/from cloud workstation/rescomb_phi.rdata")
+save(your_object, file = save_name)
+gdrive_upload(local_path = save_name, gdrive_dribble = mvobservr_dribble)
+```
+
+
+#pull down data files from gdrive
+```{r}
+save_name <- paste0("output_data/rescomb_phi.rdata")
+load(gdrive_download(local_path = save_name, gdrive_dribble = mvobservr_dribble))
+```
+
+#load data
+```{r}
+load("output_data/rescomb_phi.Rdata")
 res_comb_phi <- res_comb
-load("output_data/from cloud workstation/rescomb_cov.Rdata")
+load("output_data/rescomb_cov.Rdata")
 res_comb_cov <- res_comb
-load("output_data/from cloud workstation/rescomb_lowtrips.Rdata")
+load("output_data/rescomb_trips.Rdata")
 res_comb_trips <- res_comb
-load("output_data/from cloud workstation/rescomb_biomass.Rdata")
+load("output_data//rescomb_biomass.Rdata")
 res_comb_biomass <- res_comb
 ```
 
-rename columns & combine into single dataset
+#rename columns & combine into single dataset
 ```{r}
 metric_results <- bind_rows(
   res_comb_phi %>%
@@ -35,15 +57,18 @@ metric_results <- bind_rows(
     mutate(metric = 'biomass') %>%
     rename(value = targ_biomass)
 )
+
+rm(res_comb_phi, res_comb_cov, res_comb_trips, res_comb_biomass)
 ```
 
-check reps - should be 50 each
+#check reps
+should be 50 each
 ```{r}
 metric_results %>%
   count(metric, value)
 ```
 
-make plot
+#make plot
 ```{r}
 metric_results %>%
   select(metric, value, perma_p, mvglm_p) %>%
