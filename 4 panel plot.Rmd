@@ -1,0 +1,86 @@
+---
+title: "4 panel plot"
+output: html_notebook
+---
+
+load files (ran on cloud and pulled down output files)
+**need to replace this with pull from google drive**
+```{r}
+load("output_data/from cloud workstation/rescomb_phi.Rdata")
+res_comb_phi <- res_comb
+load("output_data/from cloud workstation/rescomb_cov.Rdata")
+res_comb_cov <- res_comb
+load("output_data/from cloud workstation/rescomb_lowtrips.Rdata")
+res_comb_trips <- res_comb
+load("output_data/from cloud workstation/rescomb_biomass.Rdata")
+res_comb_biomass <- res_comb
+```
+
+rename columns & combine into single dataset
+```{r}
+metric_results <- bind_rows(
+  res_comb_phi %>%
+    mutate(metric = 'phi', .before=1) %>%
+    rename(value = targ_phi),
+  
+  res_comb_cov %>%
+    mutate(metric = 'cov') %>%
+    rename(value = targ_cov),
+  
+  res_comb_trips %>%
+    mutate(metric = 'trips') %>%
+    rename(value = ntrips),
+  
+  res_comb_biomass %>%
+    mutate(metric = 'biomass') %>%
+    rename(value = targ_biomass)
+)
+```
+
+check reps - should be 50 each
+```{r}
+metric_results %>%
+  count(metric, value)
+```
+
+make plot
+```{r}
+metric_results %>%
+  select(metric, value, perma_p, mvglm_p) %>%
+  pivot_longer(cols=c(perma_p, mvglm_p), names_to = "test", values_to = "p") %>%
+  group_by(metric, value, test) %>%
+  summarize(psig = mean(p<=0.05), .groups="drop") %>%
+  mutate(value = case_when(
+                         metric == "biomass" ~ log10(value), 
+                         metric == "cov" ~ value*100,
+                         TRUE ~ value
+                       ), 
+         metric = factor(metric, levels = c("biomass", "cov", "phi", "trips"),
+                  labels = c("total biomass (log scale)", "coverage rate (% of trips)",
+                             "phi", "total fleet trips (N)")
+                        ),
+         test = factor(test, levels = c("mvglm_p","perma_p"),
+                       labels = c("MVGLM", "permanova")
+                       )
+      ) %>%
+  ggplot(aes(x=value, y=psig, col=test, group=test)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~metric, scales="free_x") +
+  theme_bw() +
+  labs(x=NULL, y="proportion of simulations with significant results",
+       title = "Power vs. simulation parameters",
+       subtitle = "50 replicates per value")
+```
+
+
+
+
+
+
+
+
+
+
+
+
