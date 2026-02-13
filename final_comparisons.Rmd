@@ -12,8 +12,8 @@ this is a test
 
 ```{r packages}
 library(tidyverse)
-library(FMAtools)  
-library(mvobservr)
+library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
+library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
 library(lme4)
 library(tweedie)
 
@@ -59,7 +59,7 @@ output_dribble <- gdrive_set_dribble("Projects/MVGLM-OBS/final_comparisons")
 
 ```{r set setup}
 # Set number (results in a separate seed)
-set_number <- 2  # 1 or 2
+set_number <- 1  # 1 or 2
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
 bias <- c(0, -0.10) #-0.25, -0.10, -0.40
 # Set target coverage rate
