@@ -190,7 +190,7 @@ save all but mvglm
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(trip_sets, trip_sets_adj, res_g, res_p, res_t, res_tt, file = allbutmv_name)
 # Upload to the Google Shared Drive
-gdrive_upload(allbutmv_name, output_dribble)
+gdrive_upload(allbutmv_name, output_dribble, skip_prompt = TRUE)
 ```
 
 
@@ -220,7 +220,7 @@ res_m %>%
 # Save and upload the results
 mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
-gdrive_upload(mvglm_name, output_dribble)
+gdrive_upload(mvglm_name, output_dribble, skip_promp = T)
 ```
 
 
