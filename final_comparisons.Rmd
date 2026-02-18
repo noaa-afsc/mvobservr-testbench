@@ -24,10 +24,10 @@ source("functions/runTandFtests.R")
 source("functions/runGLMM.R")
 source("functions/assign_sig.R")
 source("functions/ObserverEffectStats.R")
-source("functions/mvglm_obs_dd.R")
-source("functions/anova_obs_dd.R")
-source("functions/bootAnova_obs_dd.R")
-source("functions/qtweedie_obs_dd.R")
+#source("functions/mvglm_obs_dd.R")
+#source("functions/anova_obs_dd.R")
+#source("functions/bootAnova_obs_dd.R")
+#source("functions/qtweedie_obs_dd.R")
 ```
 
 
@@ -203,9 +203,9 @@ res_m <- imap(1:length(trip_sets_adj), ~{
       mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
       pivot_longer(cols=starts_with("sp_"),
                    names_to = 'species', values_to = 'biomass') %>%
-      mvglm_obs_dd(block = NULL, add_var = NULL, n_permutations=100) %>%
-      pluck("ps") %>%
-      rename(biomass_total = p) %>%
+      mvglm_obs(block = NULL, add_var = NULL, n_permutations=100, nCores = T) %>%
+      pluck("results") %>%
+      {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
       pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
 }) #about 5s per permutation
 res_m <- list_rbind(res_m, names_to = "set") %>%
@@ -220,7 +220,7 @@ res_m %>%
 # Save and upload the results
 mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
-gdrive_upload(mvglm_name, output_dribble, skip_promp = T)
+gdrive_upload(mvglm_name, output_dribble, skip_prompt = T)
 ```
 
 
