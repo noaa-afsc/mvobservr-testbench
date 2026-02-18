@@ -187,10 +187,18 @@ At mu_scalar = 100, about 2%
 this is without total_biomass scaling (making the fleet total a fixed amount) but that wouldn't affect the rate of 0s
 
 
+##resampling for 0s
+```{r}
+mean(rtweedie(1000000, p = 1.6, mu = 1000*0.6, phi = 3)==0)
+```
+
+
+
+
 #compare mvglm performance for mu_scalar values
 ```{r}
 # Set how many populations per scenario to generate
-n_samples_per_level <- 10
+n_samples_per_level <- 50
 # Set the Tweedie power parameter (lambda). 1 < p < 2 is typical for biomass.
 tweedie_power <- 1.6
 # Set the dispersion parameter for the Tweedie distribution.
@@ -307,6 +315,7 @@ save(res_comb, file="rescomb_mu_scalar.Rdata")
 
 
 ```{r}
+load(file="rescomb_mu_scalar.Rdata")
 res_comb %>%
   #assign_sig() %>%
   mutate(
@@ -325,7 +334,7 @@ res_comb %>%
   labs(x="mu_scalar",
        y="% of simulations with positive (significant) result",
        title = "power vs # of trips",
-       subtitle = "60% dominance, 10 trip sets per level"
+       subtitle = "60% dominance, 25% coverage, 25% observer effect, 50 trip sets per level"
   ) +
   scale_y_continuous(labels=scales::label_percent(), limits=c(0,1)) 
 ```
