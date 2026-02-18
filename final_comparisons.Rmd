@@ -243,8 +243,8 @@ res_comb <- map(trip_sets_adj, ~{
 res_comb
 
 alltests_name <- paste0("output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set", set_number, ".Rdata")
-save(res_comb, file = paste0(alltests_name, set_number, ".Rdata"))
-gdrive_upload(alltests_name, output_dribble)
+save(res_comb, file = alltests_name)
+gdrive_upload(alltests_name, output_dribble, skip_prompt = T)
 ```
 
 ###combine data from multiple sets
