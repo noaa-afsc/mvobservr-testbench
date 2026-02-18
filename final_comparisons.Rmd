@@ -256,7 +256,7 @@ r1 <- res_comb
 load(gdrive_download(paste0(alltests_name.set, 2, ".Rdata"), output_dribble))
 r2 <- res_comb
 res_comb <- bind_rows(r1, r2)
-rm(r1, r2); gc #remove temp objects and clean up
+rm(r1, r2); gc() #remove temp objects and clean up
 ```
 
 
@@ -380,31 +380,31 @@ res_comb %>%
 ##combine datasets
 ```{r}
 #bias 25
-load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set1.Rdata"), output_dribble)
+load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set1.Rdata", output_dribble))
 r1 <- res_comb
-load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set2.Rdata"), output_dribble)
+load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set2.Rdata", output_dribble))
 r2 <- res_comb %>% mutate(set = set + max(r1$set))
 res_comb <- bind_rows(r1, r2)
-rm(r1, r2); gc #remove temp objects and clean up
+rm(r1, r2); gc() #remove temp objects and clean up
 res_oe <- res_comb %>% mutate(effsize = 25)
 
 #bias 10
-load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set1.Rdata"), output_dribble)
+load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set1.Rdata", output_dribble))
 r1 <- res_comb
-load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set2.Rdata"), output_dribble)
+load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set2.Rdata", output_dribble))
 r2 <- res_comb %>% mutate(set = set + max(r1$set))
 res_comb <- bind_rows(r1, r2)
-rm(r1, r2); gc #remove temp objects and clean up
+rm(r1, r2); gc() #remove temp objects and clean up
 res_oe <- res_oe %>%
   bind_rows(res_comb %>% mutate(effsize = 10))
 
 #bias 40
-load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set1.Rdata"), output_dribble)
+load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set1.Rdata", output_dribble))
 r1 <- res_comb
-load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set2.Rdata"), output_dribble)
+load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set2.Rdata", output_dribble))
 r2 <- res_comb %>% mutate(set = set + max(r1$set))
 res_comb <- bind_rows(r1, r2)
-rm(r1, r2); gc #remove temp objects and clean up
+rm(r1, r2); gc() #remove temp objects and clean up
 res_oe <- res_oe %>%
   bind_rows(res_comb %>% mutate(effsize = 40))
 
