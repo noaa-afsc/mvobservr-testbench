@@ -54,6 +54,7 @@ target_bp_levels <- seq(0.5, 0.9, by = 0.1)
 n_samples_per_level * length(target_bp_levels)
 
 # Set the destination folder for data outputs on the Google shared drive
+output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 output_dribble <- gdrive_set_dribble("Projects/MVGLM-OBS/final_comparisons")
 ```
 
@@ -266,7 +267,7 @@ res_comb %>%
   #assign_sig() %>%
   mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
            f_test_sig = ifelse(Fp < 0.05, 1, 0),
-           dAIC_sig = ifelse(glmmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           dAIC_sig = ifelse(glmconv==1, ifelse(AICd > 2, 1, 0), NA),
            KS_test_sig = ifelse(KSp < 0.05, 1, 0),
            median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
            mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
@@ -277,7 +278,7 @@ res_comb %>%
   pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
   mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
                        ordered = TRUE,
-                       labels = c("t-test", "F test", "uni. GLMM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+                       labels = c("t-test", "F test", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
   ggplot(aes(x=bp_level, y=pctsig, col=test)) +
   geom_line(linewidth=1) +
   scale_color_brewer(palette = 'Set2') +
@@ -335,7 +336,7 @@ n_bootstraps = 500
 res_comb %>%
   mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
            f_test_sig = ifelse(Fp < 0.05, 1, 0),
-           dAIC_sig = ifelse(glmmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           dAIC_sig = ifelse(glmconv==1, ifelse(AICd > 2, 1, 0), NA),
            KS_test_sig = ifelse(KSp < 0.05, 1, 0),
            median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
            mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
@@ -354,10 +355,10 @@ res_comb %>%
   pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
   mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
                        ordered = TRUE,
-                       labels = c("t-test", "F test", "uni. GLMM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+                       labels = c("t-test", "F test", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
   group_by(bin, test) %>%
   summarize(meansig = mean(pctsig), lo = quantile(pctsig,0.025), hi = quantile(pctsig, 0.975), .groups="drop") %>%
-  filter(test %in% c('MV GLM','permanova','uni. GLMM')) %>%
+  filter(test %in% c('MV GLM','permanova','uni. GLM')) %>%
   ggplot(aes(x=as.numeric(bin), y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
   geom_line() +
   geom_ribbon(alpha = 0.2) +
@@ -443,7 +444,7 @@ n_bootstraps = 500
 res_oe %>%
   mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
            f_test_sig = ifelse(Fp < 0.05, 1, 0),
-           dAIC_sig = ifelse(glmmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           dAIC_sig = ifelse(glmconv==1, ifelse(AICd > 2, 1, 0), NA),
            KS_test_sig = ifelse(KSp < 0.05, 1, 0),
            median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
            mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
@@ -463,13 +464,14 @@ res_oe %>%
   pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
   mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
                        ordered = TRUE,
-                       labels = c("t-test", "F test", "uni. GLMM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+                       labels = c("t-test", "F test", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
   group_by(bin, effsize, test) %>%
   summarize(meansig = mean(pctsig), lo = quantile(pctsig,0.025), hi = quantile(pctsig, 0.975), .groups="drop") %>%
-  filter(test %in% c('MV GLM','permanova','uni. GLMM')) %>%
-  mutate(bp_level = paste0("BP: ", as.numeric(as.character(bin))*100, "%")) %>%
-  #ggplot(aes(x=bp_level, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
-  ggplot(aes(x=effsize/100, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
+  filter(test %in% c('MV GLM','permanova','uni. GLM')) %>%
+  #mutate(bp_level = paste0("BP: ", as.numeric(as.character(bin))*100, "%")) %>%
+  mutate(bp_level = as.numeric(as.character(bin))) %>%
+  ggplot(aes(x=bp_level, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
+  #ggplot(aes(x=effsize/100, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
   geom_line(linewidth = 1) +
   geom_point() +
   geom_ribbon(alpha = 0.2) +
@@ -484,8 +486,8 @@ res_oe %>%
   ) +
   scale_x_continuous(labels=scales::label_percent()) +
   scale_y_continuous(labels=scales::label_percent(), limits=c(0,1)) +
-  #facet_wrap(~effsize)
-  facet_wrap(~bp_level)
+  facet_wrap(~effsize)
+  #facet_wrap(~bp_level)
 ```
 
 ##figure: power of all tests for 3 bias levels
@@ -493,7 +495,7 @@ res_oe %>%
 res_oe %>%
   mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
            f_test_sig = ifelse(Fp < 0.05, 1, 0),
-           dAIC_sig = ifelse(glmmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           dAIC_sig = ifelse(glmconv==1, ifelse(AICd > 2, 1, 0), NA),
            KS_test_sig = ifelse(KSp < 0.05, 1, 0),
            median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
            mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
@@ -504,7 +506,7 @@ res_oe %>%
   pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
   mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
                        ordered = TRUE,
-                       labels = c("t-test", "F test", "uni. GLMM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+                       labels = c("t-test", "F test", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
   mutate(effsize = paste0(effsize, "% observer effect")) %>%
   ggplot(aes(x=bp_level, y=pctsig, col=test)) +
   geom_line(linewidth=1) +
