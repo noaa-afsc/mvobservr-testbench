@@ -2,8 +2,9 @@
 ## Collaborators
 The primary author(s) responsible for maintaining this repository are:
 * Craig H. Faunce (craig.faunce@noaa.gov)
-* Debra Duarte (debra.duarte@noaa.gov)
 * Geoff Mayhew (geoff.mayhew@noaa.gov)
+* Debra Duarte (debra.duarte@noaa.gov)
+
 
 # Description
 Addressing observer effects, wherein the act of observation has influence on the phenomenon being observed, is of great importance to science because its presence indicates that the results from data collected from observation (the sample) are biased and cannot be used to infer the properties of unobserved nature (the population). The presence of an observer effect in partial coverage fisheries means that the data from monitored trips (the sample) are not representative of the entire fleet (the population), and this bias can have broad implications to catch accounting and stock assessments.
@@ -15,7 +16,7 @@ Despite its development, the relative performance of the method has not been tes
 # Purpose
 The work aims to iterate the work of Duerte and Cadrin [(2004)](https://doi.org/10.1016/j.fishres.2024.107000) to include MOE in its evalution of the relative performance of methods used to measure observer effects in fisheries.
 
-The repo [mvobservr](https://github.com/noaa-afsc/mvglm-obs#) associated with conducting MOE will be used to source the most up to date code for this project.  Potential comparisons to this method are slim, because MOE uses a matrix as a response.  PERMANOVA is one for sure however.
+The repo [mvobservr](https://github.com/noaa-afsc/mvglm-obs#) associated with conducting MOE will be used to source the most up to date code for this project.
  
 # Disclaimer
 
