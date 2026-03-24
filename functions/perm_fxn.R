@@ -1,0 +1,43 @@
+permutation_test <- function(data, metric_var, obs_var, n_rep = 1000) {
+  
+  # 1. Standardize the data
+  target <- data[[metric_var]]
+  is_obs <- data[[obs_var]]
+  
+  # 2. Calculate Actual Observed Statistics
+  mean_obs <- mean(target[is_obs == 1], na.rm = TRUE)
+  mean_unobs <- mean(target[is_obs == 0], na.rm = TRUE)
+  observed_diff <- mean_obs - mean_unobs
+  
+  # 3. Resampling logic
+  perm_dist <- replicate(n_rep, {
+    shuffled_labels <- sample(is_obs)
+    m1 <- mean(target[shuffled_labels == 1], na.rm = TRUE)
+    m0 <- mean(target[shuffled_labels == 0], na.rm = TRUE)
+    m1 - m0
+  })
+  
+  # 4. Return results as a single-row tibble
+  results <- tibble(
+    mean_obs = mean_obs,
+    mean_unobs = mean_unobs,
+    observed_diff = observed_diff,
+    p_val = sum(abs(perm_dist) >= abs(observed_diff)) / n_rep
+  )
+  
+  return(results)
+}
+
+# --- Parameters & Batch Execution ---
+nperm <- 1000
+
+# Run permutation test across the list of 500 dataframes
+res_p_list <- map(trip_sets_adj, ~permutation_test(
+  data = .x, 
+  metric_var = "biomass_total", 
+  obs_var = "obs", 
+  n_rep = nperm
+))
+
+# Combine results into a 500-row table
+res_p <- list_rbind(res_p_list, names_to = "set")
