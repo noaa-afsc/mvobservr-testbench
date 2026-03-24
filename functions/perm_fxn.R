@@ -1,4 +1,4 @@
-permutation_test <- function(data, metric_var, obs_var, n_rep = 1000) {
+perm_fxn <- function(data, metric_var, obs_var, n_rep = 1000) {
   
   # 1. Standardize the data
   target <- data[[metric_var]]
@@ -27,17 +27,3 @@ permutation_test <- function(data, metric_var, obs_var, n_rep = 1000) {
   
   return(results)
 }
-
-# --- Parameters & Batch Execution ---
-nperm <- 1000
-
-# Run permutation test across the list of 500 dataframes
-res_p_list <- map(trip_sets_adj, ~permutation_test(
-  data = .x, 
-  metric_var = "biomass_total", 
-  obs_var = "obs", 
-  n_rep = nperm
-))
-
-# Combine results into a 500-row table
-res_p <- list_rbind(res_p_list, names_to = "set")

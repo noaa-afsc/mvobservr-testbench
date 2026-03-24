@@ -14,6 +14,7 @@ this is a test
 library(tidyverse)
 library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
+library(mgcv) #for gam
 library(lme4)
 library(tweedie)
 
@@ -68,8 +69,6 @@ trip_coverage <- 0.25
 
 ```
 
-
-
 ```{r generatedata}
 # for reproducibility
 
@@ -106,7 +105,6 @@ trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
 
 ```
 
-
 ```{r addbias}
 
 trip_sets_adj <- map(trip_sets, ~{.x %>%
@@ -127,7 +125,6 @@ map(trip_sets_adj, ~{
   ggplot(aes(x=b)) + geom_histogram()
 ```
 
-
 # run tests separately for time reasons
 just run on total biomass 
 
@@ -144,8 +141,24 @@ res_t %>%
 
 ```
 
-## univariate glmm
 ```{r}
+## permutation test
+nperm <- 10000
+
+# Run permutation test across the list of 500 dataframes
+res_p_list <- map(trip_sets_adj, ~perm_fxn(
+  data = .x, 
+  metric_var = "biomass_total", 
+  obs_var = "obs", 
+  n_rep = nperm
+))
+
+# Combine results into a 500-row table
+res_p <- list_rbind(res_p_list, names_to = "set")
+```
+
+```{r}
+## univariate glmm
 res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
 res_g <- list_rbind(res_g, names_to = "set")
 res_g
