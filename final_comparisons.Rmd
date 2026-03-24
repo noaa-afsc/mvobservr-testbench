@@ -25,6 +25,7 @@ source("functions/runTandFtests.R")
 source("functions/runGLMM.R")
 source("functions/assign_sig.R")
 source("functions/ObserverEffectStats.R")
+source("functions/perm_fxn.R")
 #source("functions/mvglm_obs_dd.R")
 #source("functions/anova_obs_dd.R")
 #source("functions/bootAnova_obs_dd.R")
@@ -143,15 +144,13 @@ res_t %>%
 
 ```{r}
 ## permutation test
-nperm <- 10000
+nperm <- 1000 # 6m for 10000
 
-# Run permutation test across the list of 500 dataframes
-res_p_list <- map(trip_sets_adj, ~perm_fxn(
-  data = .x, 
-  metric_var = "biomass_total", 
-  obs_var = "obs", 
-  n_rep = nperm
-))
+res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x, 
+                                           metric_var = "biomass_total", 
+                                           obs_var = "obs", 
+                                           n_rep = nperm), 
+                  .progress = "Running Permutations")
 
 # Combine results into a 500-row table
 res_p <- list_rbind(res_p_list, names_to = "set")

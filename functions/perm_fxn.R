@@ -1,3 +1,8 @@
+#' Clean Permutation Function
+#' @param data Input dataframe
+#' @param metric_var String name of the column to test (e.g., "biomass_total")
+#' @param obs_var String name of the observation flag (assumed 0/1)
+#' @param n_rep Number of permutations
 perm_fxn <- function(data, metric_var, obs_var, n_rep = 1000) {
   
   # 1. Standardize the data
