@@ -153,7 +153,7 @@ res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x,
                   .progress = "Running Permutations")
 
 # Combine results into a 500-row table
-res_p <- list_rbind(res_p_list, names_to = "set")
+res_permute <- list_rbind(res_p_list, names_to = "set")
 ```
 
 ```{r}
@@ -201,12 +201,10 @@ res_p %>%
 save all but mvglm
 ```{r}
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_t, res_tt, file = allbutmv_name)
+save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = TRUE)
 ```
-
-
 
 ##mvglm
 ```{r}
@@ -214,9 +212,9 @@ res_m <- imap(1:length(trip_sets_adj), ~{
   print(paste0("***set ", .x, " ", now()))
   trip_sets_adj[[.x]] %>%
       mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
-      pivot_longer(cols=starts_with("sp_"),
+      pivot_longer(cols = starts_with("sp_"),
                    names_to = 'species', values_to = 'biomass') %>%
-      mvglm_obs(block = NULL, add_var = NULL, n_permutations=100, nCores = T) %>%
+      mvglm_obs(block = NULL, add_var = NULL, n_permutations = 100, nCores = TRUE) %>%
       pluck("results") %>%
       {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
       pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
@@ -248,11 +246,12 @@ res_comb <- map(trip_sets_adj, ~{
           summarize(bp_level = max(bp_level), bp_true = max(bp_true), cov = mean(obs), sp1 = sum(sp_1), sp2 = sum(sp_2))
     }) %>%
   list_rbind(names_to = "set") %>%
-  left_join(res_t, by="set") %>%
-  left_join(res_g, by="set") %>%
-  left_join(res_tt, by="set") %>%
-  left_join(res_p, by="set") %>%
-  left_join(res_m, by="set")
+  left_join(res_t, by = "set") %>%
+  left_join(res_g, by = "set") %>%
+  left_join(res_tt, by = "set") %>%
+  left_join(res_p, by = "set") %>%
+  left_join(res_m, by = "set") %>%
+  left_join(res_permute, by = "set")
 res_comb
 
 alltests_name <- paste0("output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set", set_number, ".Rdata")
