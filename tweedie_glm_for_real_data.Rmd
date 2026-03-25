@@ -1,0 +1,238 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Goal: get Tweedie parameters for each fishery
+
+```{r}
+library(tidyverse)
+library(mgcv)
+```
+
+#AK data
+```{r}
+load("source_data/1_mvglm_obs_data_segmented.Rdata") #original data
+
+model_start <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
+                       select(STRATA, Species) %>% distinct()) %>%
+  select(species = Species, uid = TRIP_ID, days.fished, observed = OBSERVED_FLAG, biomass = Biomass, BLOCK, days.fished, STRATA)
+
+model_start.l <- split(model_start, f = ~ STRATA) #6 strata
+```
+
+```{r}
+ak_strat_summary <- map(1:6, ~{
+  stratnum = .x
+  stratname = model_start.l[[stratnum]]$STRATA[1]; stratname
+  glm.1 <- model_start.l[[stratnum]] %>%
+    group_by(uid) %>%
+    summarize(total_biomass = sum(biomass), .groups="drop") %>%
+    gam(total_biomass ~ 1, family=tw(link="log"), data = .)
+  
+  p_est <- glm.1$family$getTheta(TRUE)
+  phi_est <- summary(glm.1)$dispersion
+  mu_est <- unname(predict(glm.1, type="response")[1])
+  
+  data.frame(strat = stratname, 
+             p_est = p_est, phi_est = phi_est, mu_est = mu_est, 
+             n=n_distinct(model_start.l[[stratnum]]$uid), 
+             total_biomass = sum(model_start.l[[stratnum]]$biomass)
+  )
+  
+}) %>% 
+  list_rbind()
+
+ak_strat_summary %>%
+  mutate(mean_biomass = total_biomass/n)
+
+```
+
+```{r}
+for (i in 1:nrow(ak_strat_summary)) {
+  p <- model_start.l[[i]] %>%
+    group_by(uid) %>%
+    summarize(total_biomass = sum(biomass), .groups="drop") %>% 
+    mutate(type='actual') %>%
+    bind_rows(
+      data.frame(total_biomass = tweedie::rtweedie(n=10000,#ak_strat_summary$n[i], #large number for smoother fit
+                                                   xi=ak_strat_summary$p_est[i], 
+                                                   mu=ak_strat_summary$mu_est[i], 
+                                                   phi=ak_strat_summary$phi_est[i]),
+                 type='modeled'
+      ),
+      data.frame(total_biomass = tweedie::rtweedie(n=1000, xi=1.6, mu=100, phi=3),
+                 type='simulated')
+    ) %>%
+  ggplot(aes(x=total_biomass, col=type)) +
+    geom_density() +
+    labs(title=ak_strat_summary$strat[i],
+         subtitle = paste0("p: ", round(ak_strat_summary$p_est[i],2),
+                           ", mu: ", round(ak_strat_summary$mu_est[i],1),
+                           ", phi: ", round(ak_strat_summary$phi_est[i],2),
+                           ", n: ", ak_strat_summary$n[i])
+    ) +
+    theme_bw()
+  print(p)
+}
+```
+
+
+
+# NE data
+```{r}
+nedat <- readxl::read_xlsx("source_data/cams_land_202407_202506.xlsx", sheet="data")
+nedat.split <- nedat %>%
+  filter(REGION != 'NA') %>%
+  #filter(!SECGEAR_MAPPED %in% c('G_LLP','G_OTH','G_PTO','G_DRO','G_SES','G_TTS','G_OTR','G_OHS','G_TGS','G_HRP','G_PTH','G_CST','G_SEH'))
+  filter(SECGEAR_MAPPED %in% c('G_DRC','G_DRS','G_GND','G_GNS','G_HND','G_LLB','G_OTC','G_OTF','G_OTM','G_OTO','G_OTT','G_PTC','G_PTF','G_PTL','G_PTM','G_PTW','G_PUR')) %>%
+  mutate(MESH_CAT = replace_na(MESH_CAT,"NA"),
+         STRATA = paste(REGION, SECGEAR_MAPPED, MESH_CAT)) %>%
+  mutate(STRATA = str_sub(SECGEAR_MAPPED,3,4)) %>%
+  rename(total_biomass = LIVELB, uid=CAMSID) %>%
+  mutate(total_biomass = total_biomass/2205) %>% #convert from LB to MT
+  select(uid, total_biomass, STRATA) %>%
+  group_by(STRATA) %>%
+  mutate(N = n(), TB = sum(total_biomass)) %>%
+  filter(N > 25 & TB > 0) %>%
+  ungroup() %>%
+  select(-c(N, TB)) %>%
+  split(~STRATA)
+```
+
+```{r}
+ne_strat_summary <- map(1:length(nedat.split), ~{
+  stratnum = .x
+  stratname = nedat.split[[stratnum]]$STRATA[1]; stratname
+  glm.1 <- nedat.split[[stratnum]] %>%
+    gam(total_biomass ~ 1, family=tw(link="log"), data = .)
+  
+  p_est <- glm.1$family$getTheta(TRUE)
+  phi_est <- summary(glm.1)$dispersion
+  mu_est <- unname(predict(glm.1, type="response")[1])
+  
+  data.frame(strat = stratname, 
+             p_est = p_est, phi_est = phi_est, mu_est = mu_est, 
+             n=n_distinct(nedat.split[[stratnum]]$uid), 
+             total_biomass = sum(nedat.split[[stratnum]]$total_biomass)
+  )
+  
+}) %>% 
+  list_rbind()
+
+ne_strat_summary %>%
+  mutate(mean_biomass = total_biomass/n)
+
+```
+
+```{r}
+ne_strat_summary %>%
+  filter(!strat %in% c('MA G_PUR NA')) %>%
+  arrange(desc(phi_est))
+```
+
+
+```{r}
+for (i in 1:nrow(ne_strat_summary)) {
+  p <- nedat.split[[i]] %>%
+    group_by(uid) %>%
+    summarize(total_biomass = sum(total_biomass), .groups="drop") %>% 
+    mutate(type='actual') %>%
+    bind_rows(
+      data.frame(total_biomass = tweedie::rtweedie(n=10000,#ne_strat_summary$n[i], #large number for smoother fit
+                                                   xi=ne_strat_summary$p_est[i], 
+                                                   mu=ne_strat_summary$mu_est[i], 
+                                                   phi=ne_strat_summary$phi_est[i]),
+                 type='modeled'
+      ),
+      data.frame(total_biomass = tweedie::rtweedie(n=1000, xi=1.6, mu=100, phi=3),
+                 type='simulated')
+    ) %>%
+  ggplot(aes(x=total_biomass, col=type)) +
+    geom_density() +
+    labs(title=ne_strat_summary$strat[i],
+         subtitle = paste0("p: ", round(ne_strat_summary$p_est[i],2),
+                           ", mu: ", round(ne_strat_summary$mu_est[i],1),
+                           ", phi: ", round(ne_strat_summary$phi_est[i],2),
+                           ", n: ", ne_strat_summary$n[i])
+    ) +
+    theme_bw()
+  print(p)
+}
+```
+
+
+
+
+
+
+
+
+# combined
+```{r}
+strat_summary_comb <- ak_strat_summary %>% mutate(region="AK") %>%
+  bind_rows(ne_strat_summary %>% mutate(region="NE")) 
+
+strat_summary_comb %>%
+  pivot_longer(cols=-c(strat, region)) %>%
+  ggplot(aes(x=value)) +
+  geom_histogram() +
+  facet_wrap(~name, scales="free")
+```
+
+```{r}
+strat_summary_comb %>%
+  ggplot(aes(x=p_est, y=phi_est, col=region)) +
+  geom_point() +
+  geom_hline(yintercept = 3, linetype='dashed') +
+  geom_vline(xintercept = 1.6, linetype='dashed')
+
+
+strat_summary_comb %>%
+  ggplot(aes(x=p_est, y=mu_est, col=region)) +
+  geom_point() +
+  geom_hline(yintercept = 100, linetype='dashed') +
+  geom_vline(xintercept = 1.6, linetype='dashed')
+
+
+strat_summary_comb %>%
+  ggplot(aes(x=p_est, y=phi_est, size=mu_est, col=region)) +
+  geom_point(alpha = 0.5) +
+  geom_point(aes(x=1.6, y=3, size=100), col='black', shape=21)
+```
+
+
+
+```{r}
+strat_summary_comb %>%
+  #mutate(gear = str_split_i(strat, " ", 2)) %>%
+  mutate(gear = case_when(
+    region == "AK" ~ str_split_i(strat, " ", 2),
+    region == "NE" ~ strat
+  )) %>%
+  mutate(geartype = case_when(
+    gear == "TRW" ~ "MOBILE",
+    str_like(gear, "%DR%") ~ "MOBILE",
+    str_like(gear, "%GN%") ~ "FIXED",
+    str_like(gear, "%HN%") ~ "FIXED",
+    str_like(gear, "%LL%") ~ "FIXED",
+    str_like(gear, "%OT%") ~ "MOBILE",
+    str_like(gear, "%PT%") ~ "FIXED",
+    str_like(gear, "%PU%") ~ "MOBILE",
+    TRUE ~ gear
+  )) %>%
+  ggplot(aes(x=p_est, y=phi_est, size=mu_est, col=region)) +
+  geom_point(alpha = 0.5) +
+  geom_point(aes(x=1.6, y=3, size=100), col='black', shape=21) +
+  facet_wrap(~geartype)
+```
+
+
+```{r}
+strat_summary_comb %>%
+  filter(p_est > 1.25 & p_est < 1.5 & phi_est > 3 & phi_est < 4)
+```
+
+
+
+
