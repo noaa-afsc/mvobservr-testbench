@@ -181,6 +181,10 @@ output_name <- paste0("output_data/strat_summary_combined.Rdata")
 save(strat_summary_comb, file = output_name)
 # Upload to the Google Shared Drive
 gdrive_upload(output_name, output_dribble, skip_prompt = TRUE)
+
+
+#OR
+load(gdrive_download(output_name, output_dribble))
 ```
 
 ```{r}
