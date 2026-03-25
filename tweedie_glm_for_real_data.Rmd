@@ -8,6 +8,7 @@ Goal: get Tweedie parameters for each fishery
 ```{r}
 library(tidyverse)
 library(mgcv)
+library(gdrive)
 ```
 
 #AK data
@@ -173,6 +174,16 @@ for (i in 1:nrow(ne_strat_summary)) {
 strat_summary_comb <- ak_strat_summary %>% mutate(region="AK") %>%
   bind_rows(ne_strat_summary %>% mutate(region="NE")) 
 
+
+output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
+output_dribble <- gdrive_set_dribble("Projects/MVGLM-OBS/final_comparisons")
+output_name <- paste0("output_data/strat_summary_combined.Rdata")
+save(strat_summary_comb, file = output_name)
+# Upload to the Google Shared Drive
+gdrive_upload(output_name, output_dribble, skip_prompt = TRUE)
+```
+
+```{r}
 strat_summary_comb %>%
   pivot_longer(cols=-c(strat, region)) %>%
   ggplot(aes(x=value)) +
