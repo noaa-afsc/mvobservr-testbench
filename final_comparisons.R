@@ -209,3 +209,29 @@ res_m %>%
 mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
 gdrive_upload(mvglm_name, output_dribble, skip_prompt = T)
+
+#'`====================================================================================================================`
+
+# Save Batch Results ===================================================================================================
+
+load(gdrive_download(mvglm_name, output_dribble))
+load(gdrive_download(allbutmv_name, output_dribble))
+
+res_comb <- map(trip_sets_adj, ~{
+  .x %>%
+    summarize(bp_level = max(bp_level), bp_true = max(bp_true), cov = mean(obs), sp1 = sum(sp_1), sp2 = sum(sp_2))
+}) %>%
+  list_rbind(names_to = "set") %>%
+  left_join(res_t, by = "set") %>%
+  left_join(res_g, by = "set") %>%
+  left_join(res_tt, by = "set") %>%
+  left_join(res_p, by = "set") %>%
+  left_join(res_m, by = "set") %>%
+  left_join(res_permute, by = "set")
+res_comb
+
+alltests_name <- paste0(
+  "output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set", set_number, ".Rdata"
+)
+save(res_comb, file = alltests_name)
+gdrive_upload(alltests_name, output_dribble, skip_prompt = T)
