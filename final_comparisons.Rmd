@@ -14,6 +14,7 @@ this is a test
 library(tidyverse)
 library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
+library(mgcv) #for gam
 library(lme4)
 library(tweedie)
 
@@ -24,6 +25,7 @@ source("functions/runTandFtests.R")
 source("functions/runGLMM.R")
 source("functions/assign_sig.R")
 source("functions/ObserverEffectStats.R")
+source("functions/perm_fxn.R")
 #source("functions/mvglm_obs_dd.R")
 #source("functions/anova_obs_dd.R")
 #source("functions/bootAnova_obs_dd.R")
@@ -55,7 +57,6 @@ n_samples_per_level * length(target_bp_levels)
 
 # Set the destination folder for data outputs on the Google shared drive
 output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
-output_dribble <- gdrive_set_dribble("Projects/MVGLM-OBS/final_comparisons")
 ```
 
 ```{r set setup}
@@ -67,8 +68,6 @@ bias <- c(0, -0.10) #-0.25, -0.10, -0.40
 trip_coverage <- 0.25
 
 ```
-
-
 
 ```{r generatedata}
 # for reproducibility
@@ -106,7 +105,6 @@ trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
 
 ```
 
-
 ```{r addbias}
 
 trip_sets_adj <- map(trip_sets, ~{.x %>%
@@ -127,7 +125,6 @@ map(trip_sets_adj, ~{
   ggplot(aes(x=b)) + geom_histogram()
 ```
 
-
 # run tests separately for time reasons
 just run on total biomass 
 
@@ -144,8 +141,22 @@ res_t %>%
 
 ```
 
-## univariate glmm
 ```{r}
+## permutation test
+nperm <- 1000 # 6m for 10000
+
+res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x, 
+                                           metric_var = "biomass_total", 
+                                           obs_var = "obs", 
+                                           n_rep = nperm), 
+                  .progress = "Running Permutations")
+
+# Combine results into a 500-row table
+res_permute <- list_rbind(res_p_list, names_to = "set")
+```
+
+```{r}
+## univariate glmm
 res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
 res_g <- list_rbind(res_g, names_to = "set")
 res_g
@@ -189,12 +200,10 @@ res_p %>%
 save all but mvglm
 ```{r}
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_t, res_tt, file = allbutmv_name)
+save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = TRUE)
 ```
-
-
 
 ##mvglm
 ```{r}
@@ -202,9 +211,9 @@ res_m <- imap(1:length(trip_sets_adj), ~{
   print(paste0("***set ", .x, " ", now()))
   trip_sets_adj[[.x]] %>%
       mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
-      pivot_longer(cols=starts_with("sp_"),
+      pivot_longer(cols = starts_with("sp_"),
                    names_to = 'species', values_to = 'biomass') %>%
-      mvglm_obs(block = NULL, add_var = NULL, n_permutations=100, nCores = T) %>%
+      mvglm_obs(block = NULL, add_var = NULL, n_permutations = 100, nCores = TRUE) %>%
       pluck("results") %>%
       {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
       pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
@@ -236,11 +245,12 @@ res_comb <- map(trip_sets_adj, ~{
           summarize(bp_level = max(bp_level), bp_true = max(bp_true), cov = mean(obs), sp1 = sum(sp_1), sp2 = sum(sp_2))
     }) %>%
   list_rbind(names_to = "set") %>%
-  left_join(res_t, by="set") %>%
-  left_join(res_g, by="set") %>%
-  left_join(res_tt, by="set") %>%
-  left_join(res_p, by="set") %>%
-  left_join(res_m, by="set")
+  left_join(res_t, by = "set") %>%
+  left_join(res_g, by = "set") %>%
+  left_join(res_tt, by = "set") %>%
+  left_join(res_p, by = "set") %>%
+  left_join(res_m, by = "set") %>%
+  left_join(res_permute, by = "set")
 res_comb
 
 alltests_name <- paste0("output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set", set_number, ".Rdata")
