@@ -57,7 +57,6 @@ n_samples_per_level * length(target_bp_levels)
 
 # Set the destination folder for data outputs on the Google shared drive
 output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
-output_dribble <- gdrive_set_dribble("Projects/MVGLM-OBS/final_comparisons")
 ```
 
 ```{r set setup}
