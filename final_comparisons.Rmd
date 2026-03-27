@@ -261,6 +261,8 @@ gdrive_upload(alltests_name, output_dribble, skip_prompt = T)
 ###combine data from multiple sets
 ```{r}
 
+#' [TODO: Do we want these plots to be generated for a particular bias level?]
+
 alltests_name.set <- paste0("output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set")
 load(gdrive_download(paste0(alltests_name.set, 1, ".Rdata"), output_dribble))
 r1 <- res_comb
