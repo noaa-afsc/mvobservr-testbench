@@ -190,14 +190,9 @@ gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble)
 
 
 
-#pull down data files from gdrive
+#pull down and load data files from gdrive
 ```{r}
-gdrive_download(local_path = output_name, gdrive_dribble = mvobservr_dribble)
-```
-
-#load data
-```{r}
-load(output_name)
+load(gdrive_download(local_path = output_name, gdrive_dribble = mvobservr_dribble))
 ```
 
 #make plot
