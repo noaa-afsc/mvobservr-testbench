@@ -19,12 +19,13 @@ output_name = "output_data/param_plot.Rdata"
 ```{r simulation_setup}
 # Constants
 # Set how many populations per scenario to generate
-n_samples_per_level <- 5
+n_samples_per_level <- 50
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
 bias <- c(0, -0.25)
 # Set target Berger-Parker index (dominance) levels.
 bp_level <- 0.6
-
+# Set number of permutations
+n_permutations <- 1000
 
 # Defaults for varying params
 # Set the Tweedie power parameter (lambda). 1 < p < 2 is typical for biomass.
@@ -137,7 +138,7 @@ adon_formula = "Y~factor(obs)"
 
 res_p <- map(trip_sets_adj, ~{
   Y <- .x %>% dplyr::select(starts_with("sp_"))
-  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = 1000, method="euclidean")
+  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = n_permutations, method="euclidean")
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
 }, .progress=TRUE) #1 min for 60 sets
 res_p <- list_rbind(res_p, names_to = "set")
@@ -155,7 +156,7 @@ res_m <- imap(1:length(trip_sets_adj), ~{
       mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
       pivot_longer(cols=starts_with("sp_"),
                    names_to = 'species', values_to = 'biomass') %>%
-      mvglm_obs(block = NULL, add_var = NULL, n_permutations=100, nCores = 12) %>%
+      mvglm_obs(block = NULL, add_var = NULL, n_permutations= n_permutations, nCores = 12) %>%
       pluck("results") %>%
       {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
       pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
