@@ -155,7 +155,7 @@ res_m <- imap(1:length(trip_sets_adj), ~{
       mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
       pivot_longer(cols=starts_with("sp_"),
                    names_to = 'species', values_to = 'biomass') %>%
-      mvglm_obs(block = NULL, add_var = NULL, n_permutations=100, nCores = T) %>%
+      mvglm_obs(block = NULL, add_var = NULL, n_permutations=100, nCores = 12) %>%
       pluck("results") %>%
       {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
       pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
