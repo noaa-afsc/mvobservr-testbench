@@ -11,13 +11,16 @@ library(lme4)
 library(vegan)
 library(gdrive)
 library(mvobservr) # devtools::install_github("noaa-afsc/mvobservr")
-output_name = "output_data/param_plot.Rdata"
+
+batch <- 1  # 1 or 2
+output_name <- paste0("output_data/param_plot_batch", batch, ".Rdata")
 ```
 
 
 
 ```{r simulation_setup}
 # Constants
+
 # Set how many populations per scenario to generate
 n_samples_per_level <- 100
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
@@ -84,7 +87,11 @@ param_values_df <- params_to_test %>%
 
 ```{r generatedata}
 # for reproducibility
-set.seed(123)
+if(batch == 1) {
+  set.seed(123)
+} else if (batch == 2) {
+  set.seed(456)
+} else stop("'batch' needs to be either 1 or 2!")
 
 trip_sets_adj <- map(rep(1:nrow(param_values_df), n_samples_per_level), ~{
   #replace the variable parameter with the loop value, all other values remain t default
