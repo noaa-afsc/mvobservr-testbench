@@ -236,7 +236,7 @@ res_comb_tbl %>%
   theme_bw() +
   labs(x=NULL, y="proportion of simulations with significant results",
        title = "Power vs. simulation parameters",
-       subtitle = paste0(n_samples_per_level, " replicates per value")
+       subtitle = paste0(n_samples_per_level * 2, " replicates per value")
        ) +
   geom_vline(aes(xintercept=defaults), linetype='dashed')
 ```
