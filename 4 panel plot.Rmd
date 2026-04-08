@@ -200,12 +200,17 @@ gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble)
 
 #pull down and load data files from gdrive
 ```{r}
-load(gdrive_download(local_path = output_name, gdrive_dribble = mvobservr_dribble))
+load(gdrive_download(local_path = "output_data/param_plot_batch1.Rdata", gdrive_dribble = mvobservr_dribble))
+res_comb_tbl <- res_comb
+load(gdrive_download(local_path = "output_data/param_plot_batch2.Rdata", gdrive_dribble = mvobservr_dribble))
+res_comb <- res_comb |> mutate(set = set + max(res_comb_tbl$set))
+res_comb_tbl <- rbind(res_comb_tbl, res_comb)
+rm(res_comb)
 ```
 
 #make plot
 ```{r, fig.height=6}
-res_comb %>%
+res_comb_tbl %>%
   pivot_longer(cols=c(perma_p, mvglm_p), names_to = "test", values_to = "p") %>%
   group_by(param_mod, param_value, test) %>%
   summarize(psig = mean(p<=0.05), .groups="drop") %>%
