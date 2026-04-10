@@ -13,7 +13,12 @@ library(gdrive)
 
 #AK data
 ```{r}
-load("source_data/1_mvglm_obs_data_segmented.Rdata") #original data
+mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
+(load(gdrive_download(
+  local_path = "1_mvglm_obs_data_segmented.Rdata", 
+  gdrive_dribble = mvobservr_dribble,
+  temp = T
+)))  #original data
 
 model_start <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
                        select(STRATA, Species) %>% distinct()) %>%
