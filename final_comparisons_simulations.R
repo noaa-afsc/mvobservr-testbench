@@ -24,6 +24,9 @@ source("functions/perm_fxn.R")
 
 #' `===================================================================================================================`
 
+#' *Set whether to automatically upload to the Gdrive. Manually change to 'TRUE' when performing full runs!*
+set_skip_prompt <- F
+
 # Parameter Setup ----
 
 #' Set the destination folder for data outputs on the Google shared drive
@@ -181,7 +184,7 @@ res_p %>%
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, file = allbutmv_name)
 # Upload to the Google Shared Drive
-gdrive_upload(allbutmv_name, output_dribble, skip_prompt = TRUE)
+gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
 ## MVGLM ---------------------------------------------------------------------------------------------------------------
 
@@ -208,7 +211,7 @@ res_m %>%
 
 mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
-gdrive_upload(mvglm_name, output_dribble, skip_prompt = T)
+gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
 
 #'`====================================================================================================================`
 
@@ -234,4 +237,4 @@ alltests_name <- paste0(
   "output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set", set_number, ".Rdata"
 )
 save(res_comb, file = alltests_name)
-gdrive_upload(alltests_name, output_dribble, skip_prompt = T)
+gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)
