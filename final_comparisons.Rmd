@@ -393,6 +393,46 @@ res_comb %>%
 ```
 
 
+##figure: boxplot for false positives
+```{r, eval=FALSE}
+n_bootstraps = 500
+
+set.seed(123)
+res_fp <- res_comb %>%
+  mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
+           f_test_sig = ifelse(Fp < 0.05, 1, 0),
+           dAIC_sig = ifelse(glmconv==1, ifelse(AICd > 2, 1, 0), NA),
+           KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+           median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
+           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+    ) %>%
+  select(ends_with("sig")) %>%
+  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "sig") %>%
+  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+                       ordered = TRUE,
+                       labels = c("t-test", "F test", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova")))
+
+map(1:n_bootstraps, ~{slice_sample(res_fp, n=n_samples_per_level, by=test, replace=TRUE) %>%
+      mutate(boot = .x)
+    }) %>%
+  list_rbind() %>%
+  group_by(boot, test) %>%
+  summarize(pctsig = mean(sig), .groups="drop") %>%
+  ggplot(aes(x=test, y=pctsig, fill=test)) +
+  geom_boxplot() +
+  scale_color_brewer(palette = 'Set2') +
+  theme_bw() +
+  labs(x=NA,
+       y="% of simulations with positive (significant) result",
+       title = "false positive rate of tests on total biomass",
+       subtitle = paste0(round(trip_coverage*100,0), "% coverage")
+  ) +
+  scale_y_continuous(labels=scales::label_percent()) +
+  geom_hline(yintercept = c(0.1, 0.05), linetype='dashed')
+```
+
+
 
 #compare bias levels
 
