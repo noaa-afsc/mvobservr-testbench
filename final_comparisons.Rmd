@@ -429,7 +429,8 @@ map(1:n_bootstraps, ~{slice_sample(res_fp, n=n_samples_per_level, by=test, repla
        subtitle = paste0(round(trip_coverage*100,0), "% coverage")
   ) +
   scale_y_continuous(labels=scales::label_percent()) +
-  geom_hline(yintercept = c(0.1, 0.05), linetype='dashed')
+  geom_hline(yintercept = c(0.1, 0.05), linetype='dashed') +
+  theme(legend.position = "none")
 ```
 
 
