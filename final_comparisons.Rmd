@@ -46,7 +46,7 @@ phi <- 3
 fixed_total_biomass <- 1000000
 # Set the number of vessels in the fleet
 # Vessel needs to be defined for some of the analyses
-nvess <- 20
+nvess <- 1
 # Set the number of trips 
 ntrips <- 500
 # Set target Berger-Parker index (dominance) levels.
@@ -68,6 +68,14 @@ bias <- c(0, -0.10) #-0.25, -0.10, -0.40
 trip_coverage <- 0.25
 
 ```
+
+
+```{r falsepos setup, eval=FALSE}
+#replace standard values for test of no bias with 50% BP
+target_bp_levels <- 0.5
+bias <- c(0, 0)
+```
+
 
 ```{r generatedata}
 # for reproducibility
