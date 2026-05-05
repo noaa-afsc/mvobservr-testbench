@@ -1,10 +1,3 @@
-#' Problem statement: species do not always have constant observer effects - relative biomass can mask effects on 
-#' non-dominant species.
-#' 
-#' Goal: test a new method to do multivariate analysis on species catches and compare these results to those derived 
-#' from alternative multivariate and single species or univariate approaches.  We do this over multiple degrees of 
-#' species interactions (dominance) and degrees of bias (observer effects). 
-
 # Packages and Functions ----
 library(tidyverse)
 library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
@@ -25,31 +18,22 @@ source("functions/perm_fxn.R")
 #' `===================================================================================================================`
 
 #' *Set whether to automatically upload to the Gdrive. Manually change to 'TRUE' when performing full runs!*
-set_skip_prompt <- F
-
-# Parameter Setup ----
+set_skip_prompt <- T
 
 #' Set the destination folder for data outputs on the Google shared drive
 output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
-
-## Batch Setup ----
-
-#' Currently building 6 different trip populations to run on separate google cloud workstations. `set` determines which
-#' random seed will be used and `bias` specifies the magnitude of the observer effect
-
-# Set number (results in a separate seed)
-set_number <- 1  # 1 or 2
-# Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
-bias <- c(0, -0.10) #-0.25, -0.10, -0.40
-# Set target coverage rate
-trip_coverage <- 0.25
 
 ## Test Parameters ----
 
 # For tests using permutations or bootstraps, set the number of iterations
 nperm <- 1000 
-# Set how many populations per scenario to generate
-n_samples_per_level <- 100
+# Set target Berger-Parker index (dominance) levels.
+target_bp_levels <- 0.5                                   #' *For false positive test, only testing bp level of 0.5*
+# Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
+bias <- c(0, 0)                                           #' *For false positive test, there will be no bias.*
+# Set target coverage rate
+trip_coverage <- 0.25
+
 # Set the Tweedie power parameter (lambda). 1 < p < 2 is typical for biomass.
 tweedie_power <- 1.6
 # Set the dispersion parameter for the Tweedie distribution.
@@ -60,20 +44,16 @@ fixed_total_biomass <- 1000000
 # Set the number of vessels in the fleet
 # Vessel needs to be defined for some of the analyses
 nvess <- 1
+# Set how many populations per scenario to generate
+n_samples_per_level <- 500                                #' *Increased from 100 to 500*
 # Set the number of trips 
 ntrips <- 500
-# Set target Berger-Parker index (dominance) levels.
-target_bp_levels <- seq(0.5, 0.9, by = 0.1)
 
 #'`====================================================================================================================`
 
 # Generate Trip Populations ============================================================================================
 
-if(set_number == 1) {
-  set.seed(123)
-} else if(set_number == 2) {
-  set.seed(456)
-} else stop("'set_number' needs to be specified as '1' or '2'!")
+set.seed(123)
 
 trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
   #set up data frame for trips
@@ -100,6 +80,8 @@ trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
   
 }, .progress = TRUE)
 
+
+
 ## Add Bias ------------------------------------------------------------------------------------------------------------
 
 trip_sets_adj <- map(trip_sets, ~{.x %>%
@@ -110,6 +92,8 @@ trip_sets_adj <- map(trip_sets, ~{.x %>%
     )
 }, .progress = TRUE)
 
+# Using the same machinery as in final_comparisons_simulations.R, but we aren't adding any
+# bias this time around
 map(trip_sets_adj, ~{
   .x %>%
     summarize(sp2 = mean(sp_2), sp2unobs = mean(ifelse(obs==0, sp_2, NA), na.rm=TRUE),
@@ -118,6 +102,10 @@ map(trip_sets_adj, ~{
   list_rbind() %>%
   mutate(b = (sp2obs-sp2unobs)/sp2unobs) %>%
   ggplot(aes(x=b)) + geom_histogram()
+
+if(!all(mapply(function(x, y) all(x$sp_2 == y$sp_2), x = trip_sets, y = trip_sets_adj)) ) {
+  stop("Somehow sp_2 got modified and bias got added when it shouldn't have been!")
+}
 
 #'`====================================================================================================================`
 
@@ -171,7 +159,7 @@ res_p <- map(trip_sets_adj, ~{
   Y <- .x %>% dplyr::select(starts_with("sp_"))
   adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = nperm, method="euclidean")
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
-}, .progress=TRUE) #45min for 500
+}, .progress=TRUE) 
 res_p <- list_rbind(res_p, names_to = "set")
 
 res_p %>% 
@@ -181,7 +169,7 @@ res_p %>%
 
 ## *Save all but mvglm --------------------------------------------------------------------------------------------------
 
-allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
+allbutmv_name <- paste0("output_data/allbutmv_falsepos.Rdata")
 save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
@@ -209,7 +197,7 @@ res_m %>%
 
 ## *Save and upload mvglm results --------------------------------------------------------------------------------------
 
-mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
+mvglm_name <- paste0("output_data/mvglmloop_falsepos.Rdata")
 save(res_m, file = mvglm_name)
 gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
 
@@ -222,7 +210,12 @@ load(gdrive_download(allbutmv_name, output_dribble))
 
 res_comb <- map(trip_sets_adj, ~{
   .x %>%
-    summarize(bp_level = max(bp_level), bp_true = max(bp_true), cov = mean(obs), sp1 = sum(sp_1), sp2 = sum(sp_2))
+    summarize(
+      bp_level = max(bp_level), 
+      bp_true = max(bp_true), 
+      cov = mean(obs), 
+      sp1 = sum(sp_1), 
+      sp2 = sum(sp_2))
 }) %>%
   list_rbind(names_to = "set") %>%
   left_join(res_t, by = "set") %>%
@@ -233,8 +226,44 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_permute, by = "set")
 res_comb
 
-alltests_name <- paste0(
-  "output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set", set_number, ".Rdata"
-)
+alltests_name <- paste0("output_data/alltests_falsepos.Rdata")
 save(res_comb, file = alltests_name)
 gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)
+
+
+##figure: boxplot for false positives
+
+n_bootstraps <- 1000
+set.seed(123)
+res_fp <- res_comb %>%
+  mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
+         f_test_sig = ifelse(Fp < 0.05, 1, 0),
+         dAIC_sig = ifelse(glmconv==1, ifelse(AICd > 2, 1, 0), NA),
+         KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+         median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
+         mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+         perma_sig = ifelse(perma_p < 0.05, 1, 0)
+  ) %>%
+  select(ends_with("sig")) %>%
+  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "sig") %>%
+  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+                       ordered = TRUE,
+                       labels = c("t-test", "F test", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova")))
+map(1:n_bootstraps, ~{slice_sample(res_fp, n=n_samples_per_level, by=test, replace=TRUE) %>%
+    mutate(boot = .x)
+}) %>%
+  list_rbind() %>%
+  group_by(boot, test) %>%
+  summarize(pctsig = mean(sig), .groups="drop") %>%
+  ggplot(aes(x=test, y=pctsig, fill=test)) +
+  geom_boxplot() +
+  scale_color_brewer(palette = 'Set2') +
+  theme_bw() +
+  labs(x=NA,
+       y="% of simulations with positive (significant) result",
+       title = "false positive rate of tests on total biomass",
+       subtitle = paste0(round(trip_coverage*100,0), "% coverage")
+  ) +
+  scale_y_continuous(labels=scales::label_percent()) +
+  geom_hline(yintercept = c(0.1, 0.05), linetype='dashed') +
+  theme(legend.position = "none")
