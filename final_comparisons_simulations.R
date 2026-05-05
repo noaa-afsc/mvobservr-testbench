@@ -46,7 +46,7 @@ trip_coverage <- 0.25
 
 ## Test Parameters ----
 
-# For tests using permutations or boostraps, set the number of iterations
+# For tests using permutations or bootstraps, set the number of iterations
 nperm <- 1000 
 # Set how many populations per scenario to generate
 n_samples_per_level <- 100
@@ -59,7 +59,7 @@ phi <- 3
 fixed_total_biomass <- 1000000
 # Set the number of vessels in the fleet
 # Vessel needs to be defined for some of the analyses
-nvess <- 20
+nvess <- 1
 # Set the number of trips 
 ntrips <- 500
 # Set target Berger-Parker index (dominance) levels.
