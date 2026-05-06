@@ -227,17 +227,23 @@ res_comb <- map(trip_sets_adj, ~{
 res_comb
 
 alltests_name <- paste0("output_data/alltests_falsepos.Rdata")
-save(res_comb, file = alltests_name)
+save(res_comb, n_samples_per_level, file = alltests_name)
 gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)
 
+# Quickload ===================================================================================================
 
-##figure: boxplot for false positives
+##figure: boxplot for false positives ----
+
+alltests_name <- paste0("output_data/alltests_falsepos.Rdata")
+output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
+(load(gdrive_download(alltests_name, output_dribble)))
 
 n_bootstraps <- 1000
 set.seed(123)
 res_fp <- res_comb %>%
   mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
          f_test_sig = ifelse(Fp < 0.05, 1, 0),
+         permu_sig = ifelse(p_val < 0.05, 1, 0),
          dAIC_sig = ifelse(glmconv==1, ifelse(AICd > 2, 1, 0), NA),
          KS_test_sig = ifelse(KSp < 0.05, 1, 0),
          median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
@@ -246,9 +252,10 @@ res_fp <- res_comb %>%
   ) %>%
   select(ends_with("sig")) %>%
   pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "sig") %>%
-  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+  mutate(test = factor(test, 
+                       levels = c("t_test_sig", "f_test_sig", "permu_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
                        ordered = TRUE,
-                       labels = c("t-test", "F test", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova")))
+                       labels = c("t-test", "F test", "uni.permu", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova")))
 map(1:n_bootstraps, ~{slice_sample(res_fp, n=n_samples_per_level, by=test, replace=TRUE) %>%
     mutate(boot = .x)
 }) %>%
