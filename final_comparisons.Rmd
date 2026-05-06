@@ -137,6 +137,7 @@ res_oe %>%
 res_oe %>%
   mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
            f_test_sig = ifelse(Fp < 0.05, 1, 0),
+           permu_sig = ifelse(p_val < 0.05, 1, 0),
            dAIC_sig = ifelse(glmconv==1, ifelse(AICd > 2, 1, 0), NA),
            KS_test_sig = ifelse(KSp < 0.05, 1, 0),
            median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
@@ -146,9 +147,9 @@ res_oe %>%
   group_by(effsize, bp_level) %>%
   summarize(across(ends_with("sig"), ~mean(.x, na.rm=TRUE)), .groups="drop") %>%
   pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
-  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "permu_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
                        ordered = TRUE,
-                       labels = c("t-test", "F test", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+                       labels = c("t-test", "F test", "uni.permu", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
   mutate(effsize = paste0(effsize, "% observer effect")) %>%
   ggplot(aes(x=bp_level, y=pctsig, col=test)) +
   geom_line(linewidth=1) +
