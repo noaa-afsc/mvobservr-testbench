@@ -22,7 +22,7 @@ output_name <- paste0("output_data/param_plot_batch", batch, ".Rdata")
 # Constants
 
 # Set how many populations per scenario to generate
-n_samples_per_level <- 500
+n_samples_per_level <- 250
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
 bias <- c(0, -0.25)
 # Set target Berger-Parker index (dominance) levels.
@@ -191,7 +191,7 @@ save(res_comb, file = output_name)
   only once when transferring from data ran on cloud workstation
 ```{r}
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
-gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble)
+gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble, skip_prompt = TRUE)
 ```
 
 
@@ -200,6 +200,7 @@ gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble)
 
 #pull down and load data files from gdrive
 ```{r}
+mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
 load(gdrive_download(local_path = "output_data/param_plot_batch1.Rdata", gdrive_dribble = mvobservr_dribble))
 res_comb_tbl <- res_comb
 load(gdrive_download(local_path = "output_data/param_plot_batch2.Rdata", gdrive_dribble = mvobservr_dribble))
