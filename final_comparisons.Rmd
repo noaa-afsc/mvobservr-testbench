@@ -56,7 +56,7 @@ table(res_oe$effsize, res_oe$bp_level)
 
 
 ##figure: relative power for mvglm and permanova vs dominance for 3 levels of bias
-```{r}
+```{r eval = F}
 res_oe %>%
   mutate(
            mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
@@ -79,7 +79,7 @@ res_oe %>%
 
 
 ##figure: power of 3 tests vs bias w/ bootstrap error ribbons faceted by dominance
-```{r, fig.width=8}
+```{r, eval = F, fig.width=8}
 bootstrap_size = 100
 n_bootstraps = 500
 
@@ -134,7 +134,8 @@ res_oe %>%
 
 ##figure: power of all tests for 3 bias levels
 ```{r}
-res_oe %>%
+power_fig_dat <- 
+  res_oe %>%
   mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
            f_test_sig = ifelse(Fp < 0.05, 1, 0),
            permu_sig = ifelse(p_val < 0.05, 1, 0),
@@ -145,22 +146,99 @@ res_oe %>%
            perma_sig = ifelse(perma_p < 0.05, 1, 0)
     ) %>%
   group_by(effsize, bp_level) %>%
-  summarize(across(ends_with("sig"), ~mean(.x, na.rm=TRUE)), .groups="drop") %>%
-  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
-  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "permu_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
-                       ordered = TRUE,
-                       labels = c("t-test", "F test", "uni.permu", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
-  mutate(effsize = paste0(effsize, "% observer effect")) %>%
-  ggplot(aes(x=bp_level, y=pctsig, col=test)) +
-  geom_line(linewidth=1) +
-  scale_color_brewer(palette = 'Set2') +
+  summarize(
+    across(ends_with("sig"), 
+           list(
+             pctsig = ~mean(.x, na.rm = TRUE),
+             se     = ~sqrt((mean(.x, na.rm = TRUE) * (1 - mean(.x, na.rm = TRUE))) / sum(!is.na(.x)))
+           ), 
+           .names = "{.col}_{.fn}"), 
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = contains("_sig_"), 
+    names_to = c("Test", ".value"),         # .value tells R to create columns named 'pctsig' and 'se'
+    names_pattern = "(.*_sig)_(.*)"        # Regex to split name at the last underscore
+  ) %>%
+  mutate(Test = factor(Test, 
+                       levels = c("t_test_sig", "f_test_sig",
+                                  "KS_test_sig","median_test_sig","permu_sig",
+                                  "dAIC_sig", "mvglm_sig", "perma_sig"),
+                       labels = c("t-test", "F test", 
+                                  "K-S test", "Median","Permutation", 
+                                  "GLM", "MvGLM", "PERMANOVA"))) %>%
+  mutate(effsize = paste0(effsize, " Observer Effect (%)"))
+
+# Make the Figure
+
+# 1. Define the Palette
+highlight_colors <- c(
+  "grey50",
+  "#C0C482",
+  "pink",
+  "#A9B6C7",
+  "black", #"#BAA9C7",
+  "#C7A477",
+  "#E41A1C", # MvGLM (Red)
+  "#377EB8"  # PERMANOVA (Blue)
+)
+
+# 2. The Final Clean Plot
+power_plot <- ggplot(power_fig_dat, 
+                     aes(x = bp_level, y = pctsig, color = Test, fill = Test)) +
+  
+  # --- RIBBON LAYER ---
+  # Alpha is handled manually here. show.legend = FALSE keeps the legend clean.
+  geom_ribbon(aes(ymin = pmax(0, pctsig - (1.96 * se)), 
+                  ymax = pmin(1, pctsig + (1.96 * se)),
+                  alpha = Test), 
+              color = NA, 
+              show.legend = FALSE) + 
+  
+  # --- LINE LAYER ---
+  geom_line(aes(linewidth = Test %in% c("MvGLM", "PERMANOVA"))) +
+  
+  # --- POINT LAYER ---
+  # Uniform size as requested
+  geom_point(size = 2) +
+  
+  # --- SCALES ---
+  scale_color_manual(values = highlight_colors) +
+  scale_fill_manual(values = highlight_colors) +
+  
+  # Ribbon transparency: Background is faint, Focus is visible
+  scale_alpha_manual(values = c(rep(0.2, 6), 0.4, 0.4), guide = "none") +
+  
+  # Line thickness for visual pop
+  scale_linewidth_manual(values = c(0.6, 1), guide = "none") + 
+  
+  # --- FORMATTING ---
   theme_bw() +
-  labs(x="% dominance by species 1",
-       y="% of simulations with positive (significant) result",
-       title = "power of tests on total biomass",
-       subtitle = "25% coverage, reduction on catch of species 2 when observed, 200 reps"
+  labs(
+    x = "Berger-Parker Dominance (%)", 
+    y = "Power (Proportion Significant)", 
+   # title = "Power Analysis: Multivariate vs. Univariate Performance",
+    color = "Test", 
+    fill = "Test"
   ) +
-  scale_x_continuous(labels=scales::label_percent()) +
-  scale_y_continuous(labels=scales::label_percent(), limits=c(0,1)) +
-  facet_wrap(~effsize)
+  
+  scale_x_continuous(labels = scales::label_percent()) +
+  scale_y_continuous(labels = scales::label_percent()) + 
+  coord_cartesian(ylim = c(0, 1)) + 
+  facet_wrap(~effsize) +
+  
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "gray95"),
+    strip.text = element_text(face = "bold")
+  ) +
+  
+  # Simple guide to organize the layout into 2 rows
+  guides(color = guide_legend(nrow = 2, byrow = TRUE),
+         fill = guide_legend(nrow = 2, byrow = TRUE))
+
+print(power_plot)
+
+ggsave("figures/Power_plot.png", power_plot, width = 7, height = 5, units="in", dpi = 300)
 ```
