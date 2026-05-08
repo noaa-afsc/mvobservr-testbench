@@ -69,7 +69,7 @@ params_to_test <- data.frame(
   defaults = c(tweedie_power, phi, fixed_total_biomass, ntrips, trip_coverage, mu_scalar)
 )
 ```
-
+# Need to run to here for figure to work with quick pull down.
 
 ```{r}
 param_values_df <- params_to_test %>% 
@@ -196,10 +196,10 @@ gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble)
 
 
 
-
-
 #pull down and load data files from gdrive
 ```{r}
+#Run to line 72 first.
+mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
 load(gdrive_download(local_path = "output_data/param_plot_batch1.Rdata", gdrive_dribble = mvobservr_dribble))
 res_comb_tbl <- res_comb
 load(gdrive_download(local_path = "output_data/param_plot_batch2.Rdata", gdrive_dribble = mvobservr_dribble))
@@ -210,35 +210,55 @@ rm(res_comb)
 
 #make plot
 ```{r, fig.height=6}
-res_comb_tbl %>%
+perf_plot_dat <- 
+  res_comb_tbl %>%
   pivot_longer(cols=c(perma_p, mvglm_p), names_to = "test", values_to = "p") %>%
   group_by(param_mod, param_value, test) %>%
-  summarize(psig = mean(p<=0.05), .groups="drop") %>%
+  summarize(psig = mean(p<=0.05), 
+            num = n(),
+            se = sqrt((psig * (1 - psig)) / num), .groups="drop") %>%
   inner_join(params_to_test, by=c("param_mod" = "param")) %>%
-  mutate(test = factor(test, levels = c("mvglm_p","perma_p"),
-                       labels = c("MVGLM", "permanova")
-                       )
-  ) %>%
+  mutate(test = factor(test, levels = c("perma_p", "mvglm_p"),
+                       labels = c("PERMANOVA", "MvGLM")),
+         #fix panel titles
+                       param_display_name = str_to_title(param_display_name) %>%
+                                            str_replace_all(" Of ", " of ")
+                       ) %>%
   mutate(param_value = case_when(
-                         param_mod == "trip_coverage" ~ param_value*ntrips, #convert to number of trips
-                         TRUE ~ param_value
-                       )
-  ) %>%
+                         param_mod == "trip_coverage" ~ param_value*ntrips, 
+                         #convert to number of trips
+                         TRUE ~ param_value)) %>%
   mutate(defaults = case_when(
-                         param_mod == "trip_coverage" ~ defaults*ntrips, #convert to number of trips
-                         TRUE ~ defaults
-                       )
-  ) %>%
-  ggplot(aes(x=param_value, y=psig, col=test, group=test)) +
-  geom_line() +
-  geom_point() +
-  facet_wrap(~param_display_name, scales="free_x",ncol=2) +
+                         param_mod == "trip_coverage" ~ defaults*ntrips, 
+                         #convert to number of trips
+                         TRUE ~ defaults))
+
+pd <- position_dodge(width = 0.4) # Now 0.4 means "40% of the gap between points"
+
+perf_plot <- ggplot(perf_plot_dat, 
+                    aes(x = factor(param_value), # Treat X as labels, not numbers
+                        y = psig, 
+                        shape = test,
+                        linetype = test,
+                        fill = test, 
+                        group = test)) +         # Group keeps the lines connected
+  geom_line(position = pd) +
+  geom_errorbar(aes(ymin = psig - (1.96 * se), ymax = psig + (1.96 * se)), 
+                width = 0.2,                     # Width is now relative to the discrete gap
+                position = pd) + 
+  geom_point(size = 3, color = "black", position = pd) + 
+  scale_shape_manual(values = c(21, 21)) +
+  scale_fill_manual(values = c("white", "black")) +
+  scale_linetype_manual(values = c("dashed", "solid")) +
+  facet_wrap(~param_display_name, scales = "free_x", ncol = 2) +
   theme_bw() +
-  labs(x=NULL, y="proportion of simulations with significant results",
-       title = "Power vs. simulation parameters",
-       subtitle = paste0(n_samples_per_level * 2, " replicates per value")
-       ) +
-  geom_vline(aes(xintercept=defaults), linetype='dashed')
+  theme(legend.position = "bottom") +
+  labs(x = "Parameter Value", y = "Power")
+
+perf_plot
+
+ggsave("figures/power_analysis_plot.png", perf_plot, 
+       width = 10, height = 7, dpi = 300, units = "in")
 ```
 
 
