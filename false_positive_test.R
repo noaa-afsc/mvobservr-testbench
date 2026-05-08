@@ -279,9 +279,10 @@ fpr_plot <- map(1:n_bootstraps, ~{
   # Use na.rm = TRUE because dAIC_sig contains NAs for non-convergence
   summarize(pctsig = mean(sig, na.rm = TRUE), .groups = "drop") %>%
   ggplot(aes(x = test, y = pctsig)) + #fill was = test
-  geom_violin(alpha = 0.5, fill = 'black') +
+  geom_violin(alpha = 0.5, fill = 'black', quantiles = c(0.25, 0.5, 0.75), 
+              quantile.linetype = 1, quantile.color = "white") +
   stat_summary(fun = "mean", geom = "point", size = 2, color = "white") +
-  theme_bw() +
+  theme_classic() +
   labs(
     x = NULL,
     y = "Percentage of Positive (Significant) Tests",
@@ -293,8 +294,10 @@ fpr_plot <- map(1:n_bootstraps, ~{
   geom_hline(yintercept = c(0.05), linetype = 'dashed', size = 1) +
   theme(
     legend.position = "none",
+    
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
+fpr_plot
 
 ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
        width = 5, height = 4, units = "in", dpi = 300) 

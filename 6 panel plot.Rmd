@@ -1,5 +1,5 @@
 ---
-title: "4 panel plot"
+title: "6 panel plot"
 output: html_notebook
 ---
 
@@ -212,13 +212,13 @@ rm(res_comb)
 ```{r, fig.height=6}
 perf_plot_dat <- 
   res_comb_tbl %>%
-  pivot_longer(cols=c(perma_p, mvglm_p), names_to = "test", values_to = "p") %>%
-  group_by(param_mod, param_value, test) %>%
+  pivot_longer(cols=c(perma_p, mvglm_p), names_to = "Test", values_to = "p") %>%
+  group_by(param_mod, param_value, Test) %>%
   summarize(psig = mean(p<=0.05), 
             num = n(),
             se = sqrt((psig * (1 - psig)) / num), .groups="drop") %>%
   inner_join(params_to_test, by=c("param_mod" = "param")) %>%
-  mutate(test = factor(test, levels = c("perma_p", "mvglm_p"),
+  mutate(Test = factor(Test, levels = c("perma_p", "mvglm_p"),
                        labels = c("PERMANOVA", "MvGLM")),
          #fix panel titles
                        param_display_name = str_to_title(param_display_name) %>%
@@ -238,10 +238,10 @@ pd <- position_dodge(width = 0.4) # Now 0.4 means "40% of the gap between points
 perf_plot <- ggplot(perf_plot_dat, 
                     aes(x = factor(param_value), # Treat X as labels, not numbers
                         y = psig, 
-                        shape = test,
-                        linetype = test,
-                        fill = test, 
-                        group = test)) +         # Group keeps the lines connected
+                        shape = Test,
+                        linetype = Test,
+                        fill = Test, 
+                        group = Test)) +         # Group keeps the lines connected
   geom_line(position = pd) +
   geom_errorbar(aes(ymin = psig - (1.96 * se), ymax = psig + (1.96 * se)), 
                 width = 0.2,                     # Width is now relative to the discrete gap
