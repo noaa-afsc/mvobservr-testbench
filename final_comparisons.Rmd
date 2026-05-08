@@ -240,5 +240,5 @@ power_plot <- ggplot(power_fig_dat,
 
 print(power_plot)
 
-ggsave("figures/Power_plot.png", power_plot, width = 7, height = 5, units="in", dpi = 300)
+ggsave("figures/Power_by_obseffect_bp_plot.png", power_plot, width = 7, height = 5, units="in", dpi = 300)
 ```
