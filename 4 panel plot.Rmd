@@ -22,7 +22,7 @@ output_name <- paste0("output_data/param_plot_batch", batch, ".Rdata")
 # Constants
 
 # Set how many populations per scenario to generate
-n_samples_per_level <- 250
+n_samples_per_level <- 100
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
 bias <- c(0, -0.25)
 # Set target Berger-Parker index (dominance) levels.
