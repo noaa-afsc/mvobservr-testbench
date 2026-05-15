@@ -64,6 +64,8 @@ nvess <- 1
 ntrips <- 500
 # Set target Berger-Parker index (dominance) levels.
 target_bp_levels <- seq(0.5, 0.9, by = 0.1)
+# Set scalar for Tweedie distributions
+mu_scalar <- 100
 
 #'`====================================================================================================================`
 
@@ -91,8 +93,8 @@ trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
     temp_catches <- data.frame(id = 1:batch_size)
     
     #create catches
-    temp_catches$sp_1 <- rtweedie(batch_size, p = tweedie_power, mu = 100*target_bp_levels[.x], phi = phi)
-    temp_catches$sp_2 <- rtweedie(batch_size, p = tweedie_power, mu = 100*(1-target_bp_levels[.x]), phi = phi)
+    temp_catches$sp_1 <- rtweedie(batch_size, p = tweedie_power, mu = mu_scalar*target_bp_levels[.x], phi = phi)
+    temp_catches$sp_2 <- rtweedie(batch_size, p = tweedie_power, mu = mu_scalar*(1-target_bp_levels[.x]), phi = phi)
     # the 100 acts as a raising factor to get away from a lot of 0s
     
     # Keep only rows where at least one species is > 0
