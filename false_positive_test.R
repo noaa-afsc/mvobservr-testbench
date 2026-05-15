@@ -231,6 +231,7 @@ save(res_comb, n_samples_per_level, file = alltests_name)
 gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)
 
 # Quickload ===================================================================================================
+# Must run lines 1-50 first!
 
 ##figure: boxplot for false positives ----
 
@@ -238,39 +239,65 @@ alltests_name <- paste0("output_data/alltests_falsepos.Rdata")
 output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 (load(gdrive_download(alltests_name, output_dribble)))
 
-n_bootstraps <- 1000
-set.seed(123)
 res_fp <- res_comb %>%
-  mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
-         f_test_sig = ifelse(Fp < 0.05, 1, 0),
-         permu_sig = ifelse(p_val < 0.05, 1, 0),
-         dAIC_sig = ifelse(glmconv==1, ifelse(AICd > 2, 1, 0), NA),
-         KS_test_sig = ifelse(KSp < 0.05, 1, 0),
-         median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
-         mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
-         perma_sig = ifelse(perma_p < 0.05, 1, 0)
+  mutate(
+    # Standard p-value threshold is <= 0.05
+    t_test_sig      = ifelse(tp <= 0.05, 1, 0),
+    f_test_sig      = ifelse(Fp <= 0.05, 1, 0),
+    permu_sig       = ifelse(p_val <= 0.05, 1, 0),
+    # AIC logic: significant if converged AND delta AIC >= 2
+    dAIC_sig        = ifelse(glmconv == 1, ifelse(AICd >= 2, 1, 0), NA),
+    KS_test_sig     = ifelse(KSp <= 0.05, 1, 0),
+    median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
+    mvglm_sig       = ifelse(mvglm_p <= 0.05, 1, 0),
+    perma_sig       = ifelse(perma_p <= 0.05, 1, 0)
   ) %>%
   select(ends_with("sig")) %>%
-  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "sig") %>%
-  mutate(test = factor(test, 
-                       levels = c("t_test_sig", "f_test_sig", "permu_sig", "dAIC_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
-                       ordered = TRUE,
-                       labels = c("t-test", "F test", "uni.permu", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova")))
-map(1:n_bootstraps, ~{slice_sample(res_fp, n=n_samples_per_level, by=test, replace=TRUE) %>%
+  pivot_longer(
+    cols      = ends_with("sig"), 
+    names_to  = "test", 
+    values_to = "sig"
+  ) %>%
+  mutate(test = factor(
+    test, 
+    levels  = c("t_test_sig", "dAIC_sig", "f_test_sig", "permu_sig", "mvglm_sig",  
+                "KS_test_sig", "perma_sig", "median_test_sig"),
+    ordered = TRUE,
+    labels  = c("t-test", "GLM", "F test", "Permutation","MvGLM",  
+                "K-S test", "PERMANOVA", "Median")
+  ))
+
+set.seed(123) # Ensure reproducibility for the bootstrap
+n_bootstraps <- 1000
+
+fpr_plot <- map(1:n_bootstraps, ~{
+  slice_sample(res_fp, n = n_samples_per_level, by = test, replace = TRUE) %>%
     mutate(boot = .x)
 }) %>%
   list_rbind() %>%
   group_by(boot, test) %>%
-  summarize(pctsig = mean(sig), .groups="drop") %>%
-  ggplot(aes(x=test, y=pctsig, fill=test)) +
-  geom_boxplot() +
-  scale_color_brewer(palette = 'Set2') +
-  theme_bw() +
-  labs(x=NA,
-       y="% of simulations with positive (significant) result",
-       title = "false positive rate of tests on total biomass",
-       subtitle = paste0(round(trip_coverage*100,0), "% coverage")
+  # Use na.rm = TRUE because dAIC_sig contains NAs for non-convergence
+  summarize(pctsig = mean(sig, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = test, y = pctsig)) + #fill was = test
+  geom_violin(alpha = 0.5, fill = 'black', quantiles = c(0.25, 0.5, 0.75), 
+              quantile.linetype = 1, quantile.color = "white") +
+  stat_summary(fun = "mean", geom = "point", size = 2, color = "white") +
+  theme_classic() +
+  labs(
+    x = NULL,
+    y = "Percentage of Positive (Significant) Tests",
+   # title = "False Positive Rate of Tests on Total Biomass",
+    subtitle = paste0(round(trip_coverage * 100, 0), "% coverage")
   ) +
-  scale_y_continuous(labels=scales::label_percent()) +
-  geom_hline(yintercept = c(0.1, 0.05), linetype='dashed') +
-  theme(legend.position = "none")
+  scale_y_continuous(labels = scales::label_percent()) +
+  # Reference lines for standard alpha levels
+  geom_hline(yintercept = c(0.05), linetype = 'dashed', size = 1) +
+  theme(
+    legend.position = "none",
+    
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+fpr_plot
+
+ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
+       width = 5, height = 4, units = "in", dpi = 300) 
