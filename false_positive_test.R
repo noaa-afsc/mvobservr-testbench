@@ -18,7 +18,7 @@ source("functions/perm_fxn.R")
 #' `===================================================================================================================`
 
 #' *Set whether to automatically upload to the Gdrive. Manually change to 'TRUE' when performing full runs!*
-set_skip_prompt <- T
+set_skip_prompt <- F
 
 #' Set the destination folder for data outputs on the Google shared drive
 output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
@@ -45,7 +45,7 @@ fixed_total_biomass <- 1000000
 # Vessel needs to be defined for some of the analyses
 nvess <- 1
 # Set how many populations per scenario to generate
-n_samples_per_level <- 50                                #' *500 for full run*
+n_samples_per_level <- 10                               #' *500 for full run*
 # Set the number of trips 
 ntrips <- 500
 
@@ -121,8 +121,8 @@ res_t <- map(trip_sets_adj, ~runTandFtests(.x, "biomass_total"))
 res_t <- list_rbind(res_t, names_to = "set")
 
 res_t %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
+  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
+  group_by(trip_coverage) %>% 
   summarize(mean(tp < 0.05), mean(Fp < 0.05))
 
 
@@ -142,8 +142,8 @@ res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .p
 res_g <- list_rbind(res_g, names_to = "set")
 
 res_g %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
+  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
+  group_by(trip_coverage) %>% 
   summarize(mean(AICd>2))
 
 ## Triplet Analysis ----------------------------------------------------------------------------------------------------
@@ -152,8 +152,8 @@ res_tt <- map(trip_sets_adj, ~TripletAnalysis(.x, "biomass_total", bootstrap_rep
 res_tt <- list_rbind(res_tt, names_to = "set")
 
 res_tt %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
+  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
+  group_by(trip_coverage) %>% 
   summarize(mean(KSp < 0.05), mean(ci_lo > 0 | ci_hi < 0))
 
 ## Permanova -----------------------------------------------------------------------------------------------------------
@@ -167,8 +167,8 @@ res_p <- map(trip_sets_adj, ~{
 res_p <- list_rbind(res_p, names_to = "set")
 
 res_p %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
+  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
+  group_by(trip_coverage) %>% 
   summarize(mean(perma_p<0.05))
 
 ## *Save all but mvglm --------------------------------------------------------------------------------------------------
@@ -195,8 +195,8 @@ res_m <- list_rbind(res_m, names_to = "set") %>%
   filter(metric == "biomass_total")
 
 res_m %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
+  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
+  group_by(trip_coverage) %>% 
   summarize(mean(mvglm_p<0.05))
 
 ## *Save and upload mvglm results --------------------------------------------------------------------------------------
