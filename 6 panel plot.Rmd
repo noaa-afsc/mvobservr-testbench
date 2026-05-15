@@ -1,5 +1,5 @@
 ---
-title: "4 panel plot"
+title: "6 panel plot"
 output: html_notebook
 ---
 
