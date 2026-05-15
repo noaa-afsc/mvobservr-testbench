@@ -56,13 +56,35 @@ ntrips <- 500
 set.seed(123)
 
 trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
-  #set up data frame for trips
-  catches <- data.frame(uid = 1:ntrips)
+  # 1. Generate data until we have enough valid rows
+  # We generate a bit extra (e.g., 20% more) to reduce the chance of needing a second loop
+  valid_catches <- data.frame()
   
-  #create catches
-  catches$sp_1 <- rtweedie(ntrips, p = tweedie_power, mu = 100*target_bp_levels[.x], phi = phi)
-  catches$sp_2 <- rtweedie(ntrips, p = tweedie_power, mu = 100*(1-target_bp_levels[.x]), phi = phi)
-  # the 100 acts as a raising factor to get away from a lot of 0s
+  while(nrow(valid_catches) < ntrips) {
+    # Determine how many more rows we need
+    needed <- ntrips - nrow(valid_catches)
+    # Oversampling slightly (1.5x) to ensure we hit the target in one go
+    batch_size <- ceiling(needed * 1.5) 
+    
+    #set up data frame for trips
+    temp_catches <- data.frame(id = 1:batch_size)
+    
+    #create catches
+    temp_catches$sp_1 <- rtweedie(batch_size, p = tweedie_power, mu = 100*target_bp_levels[.x], phi = phi)
+    temp_catches$sp_2 <- rtweedie(batch_size, p = tweedie_power, mu = 100*(1-target_bp_levels[.x]), phi = phi)
+    # the 100 acts as a raising factor to get away from a lot of 0s
+    
+    # Keep only rows where at least one species is > 0
+    temp_catches <- temp_catches %>% filter(sp_1 > 0 | sp_2 > 0)
+    
+    valid_catches <- bind_rows(valid_catches, temp_catches)
+  }
+  
+  # 2. Trim to exactly ntrips and add UID
+  catches <- valid_catches %>%
+    slice(1:ntrips) %>%
+    select(-id) %>% #drop temp id
+    mutate(uid = 1:ntrips)
   
   #standardize catches
   catches <- catches %>%
@@ -157,7 +179,7 @@ res_tt %>%
 adon_formula = "Y~factor(obs)"
 res_p <- map(trip_sets_adj, ~{
   Y <- .x %>% dplyr::select(starts_with("sp_"))
-  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = nperm, method="euclidean")
+  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = nperm, method="bray")
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
 }, .progress=TRUE) 
 res_p <- list_rbind(res_p, names_to = "set")
