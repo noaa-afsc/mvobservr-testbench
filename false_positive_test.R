@@ -32,7 +32,7 @@ target_bp_levels <- 0.5                                   #' *For false positive
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
 bias <- c(0, 0)                                           #' *For false positive test, there will be no bias.*
 # Set target coverage rate
-trip_coverage <- 0.25
+trip_coverage <- c(0.05, 0.25, 0.45, 0.65, 0.85)
 
 # Set the Tweedie power parameter (lambda). 1 < p < 2 is typical for biomass.
 tweedie_power <- 1.6
@@ -45,7 +45,7 @@ fixed_total_biomass <- 1000000
 # Vessel needs to be defined for some of the analyses
 nvess <- 1
 # Set how many populations per scenario to generate
-n_samples_per_level <- 500                                #' *Increased from 100 to 500*
+n_samples_per_level <- 50                                #' *500 for full run*
 # Set the number of trips 
 ntrips <- 500
 
@@ -55,13 +55,15 @@ ntrips <- 500
 
 set.seed(123)
 
-trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
+grid <- expand_grid(sample_id = 1:n_samples_per_level,cvg = trip_coverage)
+
+trip_sets <- pmap(grid, function(sample_id, cvg) {
   #set up data frame for trips
   catches <- data.frame(uid = 1:ntrips)
   
   #create catches
-  catches$sp_1 <- rtweedie(ntrips, p = tweedie_power, mu = 100*target_bp_levels[.x], phi = phi)
-  catches$sp_2 <- rtweedie(ntrips, p = tweedie_power, mu = 100*(1-target_bp_levels[.x]), phi = phi)
+  catches$sp_1 <- rtweedie(ntrips, p = tweedie_power, mu = 100*target_bp_levels, phi = phi)
+  catches$sp_2 <- rtweedie(ntrips, p = tweedie_power, mu = 100*(1-target_bp_levels), phi = phi)
   # the 100 acts as a raising factor to get away from a lot of 0s
   
   #standardize catches
@@ -71,13 +73,15 @@ trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
     mutate(across(c(sp_1, sp_2), function(x) x*scalar)) %>%
     select(-scalar, -total_biomass) %>%
     mutate(biomass_total = sp_1 + sp_2) %>% #this is at the trip level, previously was at the fleet level
-    mutate(bp_level = target_bp_levels[.x],
+    mutate(bp_level = target_bp_levels,
            bp_true = sum(sp_1)/sum(biomass_total))
   
   #add vessel randomly
   catches <- catches %>%
-    mutate(vessnum = sample(nvess, size=nrow(.), replace=TRUE)) 
-  
+    mutate(
+      vessnum = sample(nvess, size=nrow(.), replace=TRUE),
+      trip_coverage = cvg) 
+  return(catches)
 }, .progress = TRUE)
 
 
