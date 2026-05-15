@@ -18,15 +18,20 @@ source("functions/perm_fxn.R")
 #' `===================================================================================================================`
 
 #' *Set whether to automatically upload to the Gdrive. Manually change to 'TRUE' when performing full runs!*
-set_skip_prompt <- F
+set_skip_prompt <- Y
 
 #' Set the destination folder for data outputs on the Google shared drive
 output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 
 ## Test Parameters ----
 
+# Set how many populations per scenario to generate
+n_samples_per_level <- 500                               #' *500 for full run*
 # For tests using permutations or bootstraps, set the number of iterations
-nperm <- 1000 
+nperm <- 1000                                            #' *1000 for full run*
+
+# Set the number of trips 
+ntrips <- 500                                           
 # Set target Berger-Parker index (dominance) levels.
 target_bp_levels <- 0.5                                   #' *For false positive test, only testing bp level of 0.5*
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
@@ -44,10 +49,6 @@ fixed_total_biomass <- 1000000
 # Set the number of vessels in the fleet
 # Vessel needs to be defined for some of the analyses
 nvess <- 1
-# Set how many populations per scenario to generate
-n_samples_per_level <- 10                               #' *500 for full run*
-# Set the number of trips 
-ntrips <- 500
 
 #'`====================================================================================================================`
 
