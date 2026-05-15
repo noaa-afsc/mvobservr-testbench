@@ -168,7 +168,7 @@ trip_sets_adj <- map(rep(1:nrow(param_values_df), n_samples_per_level), ~{
 ```{r}
 adon_formula = "Y~factor(obs)"
 
-res_p <- map(head(trip_sets_adj), ~{
+res_p <- map(trip_sets_adj, ~{
   Y <- .x %>% dplyr::select(starts_with("sp_"))
   adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = n_permutations, method="bray")
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
