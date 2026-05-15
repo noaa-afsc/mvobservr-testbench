@@ -16,8 +16,6 @@ batch <- 1  # 1 or 2
 output_name <- paste0("output_data/param_plot_batch", batch, ".Rdata")
 ```
 
-
-
 ```{r simulation_setup}
 # Constants
 
@@ -47,7 +45,6 @@ mu_scalar <- 100
 
 ```
 
-
 ```{r}
 # Set up varying parameters and their levels
 params_to_test <- data.frame(
@@ -70,7 +67,6 @@ params_to_test <- data.frame(
 )
 ```
 
-
 ```{r}
 param_values_df <- params_to_test %>% 
   select(param, param_values) %>%
@@ -83,7 +79,6 @@ param_values_df <- params_to_test %>%
   mutate(param_val = as.numeric(param_val)) %>%
   select(-name)
 ```
-
 
 ```{r generatedata}
 # for reproducibility
@@ -163,7 +158,6 @@ trip_sets_adj <- map(rep(1:nrow(param_values_df), n_samples_per_level), ~{
 
 ```
 
-
 ##permanova
 ```{r}
 adon_formula = "Y~factor(obs)"
@@ -197,7 +191,6 @@ res_m <- list_rbind(res_m, names_to = "set") %>%
   filter(metric == "biomass_total")
 ```
 
-
 #combine output
 ```{r}
 res_comb <- map(trip_sets_adj, ~ .x[1, c("param_mod", "param_value")]) %>%
@@ -210,18 +203,12 @@ res_comb
 save(res_comb, file = output_name)
 ```
 
-
-
 #upload files to gdrive
   only once when transferring from data ran on cloud workstation
 ```{r}
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
 gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble)
 ```
-
-
-
-
 
 #pull down and load data files from gdrive
 ```{r}
