@@ -248,7 +248,7 @@ perf_plot_dat <-
                          #convert to number of trips
                          TRUE ~ defaults))
 
-pd <- position_dodge(width = 0.4) # Now 0.4 means "40% of the gap between points"
+pd <- position_dodge(width = 0.1) # Now 0.4 means "40% of the gap between points"
 
 perf_plot <- ggplot(perf_plot_dat, 
                     aes(x = factor(param_value), # Treat X as labels, not numbers
