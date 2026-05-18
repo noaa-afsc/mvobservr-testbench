@@ -18,7 +18,7 @@ source("functions/perm_fxn.R")
 #' `===================================================================================================================`
 
 #' *Set whether to automatically upload to the Gdrive. Manually change to 'TRUE' when performing full runs!*
-set_skip_prompt <- Y
+set_skip_prompt <- TRUE
 
 #' Set the destination folder for data outputs on the Google shared drive
 output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
@@ -26,9 +26,9 @@ output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVEC
 ## Test Parameters ----
 
 # Set how many populations per scenario to generate
-n_samples_per_level <- 500                               #' *500 for full run*
+n_samples_per_level <- 50                               #' *500 for full run*
 # For tests using permutations or bootstraps, set the number of iterations
-nperm <- 1000                                            #' *1000 for full run*
+nperm <- 100                                            #' *1000 for full run*
 
 # Set the number of trips 
 ntrips <- 500                                           
