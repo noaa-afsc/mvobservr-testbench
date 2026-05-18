@@ -119,13 +119,12 @@ if(!all(mapply(function(x, y) all(x$sp_2 == y$sp_2), x = trip_sets, y = trip_set
 ## T and F -------------------------------------------------------------------------------------------------------------
 
 res_t <- map(trip_sets_adj, ~runTandFtests(.x, "biomass_total"))
-res_t <- list_rbind(res_t, names_to = "set")
+res_t <- list_rbind(res_t, names_to = "set") %>%
+  mutate(trip_coverage = grid$cvg)
 
 res_t %>% 
-  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
   group_by(trip_coverage) %>% 
   summarize(mean(tp < 0.05), mean(Fp < 0.05))
-
 
 ## Univariate Permutation ----------------------------------------------------------------------------------------------
 
@@ -135,25 +134,26 @@ res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x,
                                            n_rep = nperm), 
                   .progress = "Running Permutations")
 # Combine results into a 500-row table
-res_permute <- list_rbind(res_p_list, names_to = "set")
+res_permute <- list_rbind(res_p_list, names_to = "set") %>%
+  mutate(trip_coverage = grid$cvg)
 
 ## Univariate GLMM -----------------------------------------------------------------------------------------------------
 
 res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
-res_g <- list_rbind(res_g, names_to = "set")
-
+res_g <- list_rbind(res_g, names_to = "set") %>%
+  mutate(trip_coverage = grid$cvg)
+  
 res_g %>% 
-  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
   group_by(trip_coverage) %>% 
   summarize(mean(AICd>2))
 
 ## Triplet Analysis ----------------------------------------------------------------------------------------------------
 
 res_tt <- map(trip_sets_adj, ~TripletAnalysis(.x, "biomass_total", bootstrap_reps = nperm), .progress = TRUE)
-res_tt <- list_rbind(res_tt, names_to = "set")
+res_tt <- list_rbind(res_tt, names_to = "set") %>% 
+  mutate(trip_coverage = grid$cvg)
 
 res_tt %>% 
-  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
   group_by(trip_coverage) %>% 
   summarize(mean(KSp < 0.05), mean(ci_lo > 0 | ci_hi < 0))
 
@@ -165,10 +165,10 @@ res_p <- map(trip_sets_adj, ~{
   adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = nperm, method="euclidean")
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
 }, .progress=TRUE) 
-res_p <- list_rbind(res_p, names_to = "set")
+res_p <- list_rbind(res_p, names_to = "set") %>%
+  mutate(trip_coverage = grid$cvg)
 
 res_p %>% 
-  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
   group_by(trip_coverage) %>% 
   summarize(mean(perma_p<0.05))
 
@@ -193,10 +193,10 @@ res_m <- imap(1:length(trip_sets_adj), ~{
     pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
 })
 res_m <- list_rbind(res_m, names_to = "set") %>%
-  filter(metric == "biomass_total")
+  filter(metric == "biomass_total") %>%
+  mutate(trip_coverage = grid$cvg)
 
 res_m %>% 
-  mutate(trip_coverage = rep(trip_coverage, n_samples_per_level)) %>% 
   group_by(trip_coverage) %>% 
   summarize(mean(mvglm_p<0.05))
 
