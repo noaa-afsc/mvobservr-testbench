@@ -122,4 +122,52 @@ map(trip_sets_adj, ~{
 
 #'`====================================================================================================================`
 
-trips <- as.data.frame(trip_sets_adj[1])
+trips <- as.data.frame(trip_sets_adj[2])
+
+Y <- as.matrix(trips %>% select(starts_with("sp_"))) #Species
+X_TR <- as.matrix(trips %>% select("obs"))
+#X_TR$obs <- as.factor(X_TR$obs)
+
+#Setup test.
+
+# 1. PREPARE DATA STRUCTURES
+# Y: Your species matrix (sites as rows, species as columns)
+# X_env: Dataframe containing your fixed observer factor
+
+
+# 2. FIT THE NULL MODEL
+# Controls for block and builds the ordination space, ignoring the observer effect
+system.time({ # 194 seconds for 1 set.
+  model_null <- gllvm(par = c(1.3, 1.8),
+  y = Y, 
+ # X = NULL, 
+family = "tweedie" # Use "tweedie" if your data is biomass/weight!
+)
+
+# 3. FIT THE FULL MODEL
+# Introduces the ObserverStatus as an environmental predictor
+model_full <- gllvm(
+  y = Y, 
+  X = X_TR, 
+  family = "tweedie"
+)
+
+# 4. TEST FOR SIGNIFICANCE (The P-Value Step)
+# Computes a Likelihood Ratio Test between the nested models
+anova(model_null, model_full)
+})
+
+#From instructions- these diagnostic plots look like shit
+par(mfrow = c(3, 2), mar = c(4, 4, 2, 1))
+plot(model_null, var.colors = 1)
+
+par(mfrow = c(1, 2))
+plot(model_null, which = 1:2, var.colors = 1)
+
+
+coefplot(model_full) #shows the 10% effect.
+
+## New data - example of testing with sites, locations, env parameters, etc.
+# http://jenniniku.github.io/gllvm/articles/vignette2.html
+
+
