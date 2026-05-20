@@ -185,6 +185,7 @@ m_full <- glmmTMB(
 anova_results <- anova(m_null, m_full)
 print(anova_results)
 anova_results$`Pr(>Chisq)`[2]
+m_full_wide$Power #estimated tweedie power
 
 library(DHARMa)
 # Generate simulated residuals for the full model
@@ -220,7 +221,7 @@ m_null_wide <- gllvm(
 m_full_wide <- gllvm(
   y = Y, 
   X = X, 
-  formula = ~ obs, 
+  formula = ~ obs, #not needed but if X contained more than one variable this is the fail safe method.
   family = "tweedie", 
   num.lv = 0,
   Power = NULL #estimate power
