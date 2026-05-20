@@ -124,50 +124,122 @@ map(trip_sets_adj, ~{
 
 trips <- as.data.frame(trip_sets_adj[2])
 
-Y <- as.matrix(trips %>% select(starts_with("sp_"))) #Species
-X_TR <- as.matrix(trips %>% select("obs"))
-#X_TR$obs <- as.factor(X_TR$obs)
-
-#Setup test.
-
-# 1. PREPARE DATA STRUCTURES
-# Y: Your species matrix (sites as rows, species as columns)
-# X_env: Dataframe containing your fixed observer factor
 
 
-# 2. FIT THE NULL MODEL
-# Controls for block and builds the ordination space, ignoring the observer effect
-system.time({ # 194 seconds for 1 set.
-  model_null <- gllvm(par = c(1.3, 1.8),
-  y = Y, 
- # X = NULL, 
-family = "tweedie" # Use "tweedie" if your data is biomass/weight!
+# GLM ------------------------------------------------------------------------------------------------------------------
+## using mgcv ----
+# https://library.virginia.edu/data/articles/getting-started-tweedie-models-0
+
+glm_nullmgcv <- gam(sp_2 ~ 1, #gam without a smoother is a glm
+            family=tw(link="log"),
+            data=trips) 
+
+glm_fullmgcv <- update(glm_nullmgcv,  .~. + factor(obs), #gam without a smoother is a glm
+                family=tw(link="log"),
+                data=trips) 
+
+#check residuals
+par(mfrow = c(2,2))
+gam.check(glm_fullmgcv)
+
+## using glmmTMB ----
+library(glmmTMB)
+glm_null <- glmmTMB(biomass_total ~ 1, 
+                     data = trips, 
+                     family = tweedie(link = "log"))
+
+glm_full <- update(glm_null, biomass_total ~ factor(obs))
+
+glm_out <- anova(glm_null, glm_full)
+glm_p <- glm_out$`Pr(>Chisq)`[2] #Chi-square p-value
+
+
+# MvGLM ----------------------------------------------------------------------------------------------------------------
+## using glmmTMB ----
+trips_long <- trips %>%
+  pivot_longer(
+    cols = c(sp_1, sp_2),
+    names_to = "species",
+    values_to = "biomass"
+  ) %>%
+  mutate(species = factor(species),
+         obs = factor(obs))
+
+head(trips_long)
+
+# Fit the Null Model (Intercepts only per species)
+m_null <- glmmTMB(
+  biomass ~ 0 + species, 
+  data = trips_long, 
+  family = tweedie(link = "log")
 )
 
-# 3. FIT THE FULL MODEL
-# Introduces the ObserverStatus as an environmental predictor
-model_full <- gllvm(
-  y = Y, 
-  X = X_TR, 
-  family = "tweedie"
+# Fit the Full Model (Species intercepts + Observer effect per species)
+m_full <- glmmTMB(
+  biomass ~ 0 + species + species:obs, 
+  data = trips_long, 
+  family = tweedie(link = "log")
 )
 
-# 4. TEST FOR SIGNIFICANCE (The P-Value Step)
-# Computes a Likelihood Ratio Test between the nested models
-anova(model_null, model_full)
-})
+# Run the Likelihood Ratio Test (ANOVA)
+anova_results <- anova(m_null, m_full)
+print(anova_results)
+anova_results$`Pr(>Chisq)`[2]
 
-#From instructions- these diagnostic plots look like shit
-par(mfrow = c(3, 2), mar = c(4, 4, 2, 1))
-plot(model_null, var.colors = 1)
+library(DHARMa)
+# Generate simulated residuals for the full model
+sim_res <- simulateResiduals(fittedModel = m_full, n = 500)
 
+# Plot the diagnostics
+# This produces two plots: 
+# 1. A QQ plot to detect deviations from the expected distribution.
+# 2. A residuals vs. predicted plot to check for heteroscedasticity.
+plot(sim_res)
+
+# If you want to formally test for zero-inflation (to ensure the 
+# Tweedie is handling the hard zeroes adequately):
+testZeroInflation(sim_res)
+
+
+## using Latent variable gllvm ----
+# 1. Isolate the response matrix (Y)
+Y <- as.matrix(trips[, c("sp_1", "sp2")])
+
+# 2. Isolate the predictor data frame (X)
+X <- trips %>% select(obs)
+
+# Fit the Null Model (Intercepts only per species)
+m_null_wide <- gllvm(
+  y = Y, 
+  family = "tweedie", 
+  num.lv = 0,
+  Power = NULL
+)
+
+# Fit the Full Model (Species intercepts + Observer effect)
+m_full_wide <- gllvm(
+  y = Y, 
+  X = X, 
+  formula = ~ obs, 
+  family = "tweedie", 
+  num.lv = 0,
+  Power = NULL #estimate power
+)
+
+# Run the Likelihood Ratio Test
+anova_res <- anova(m_null_wide, m_full_wide)
+
+# Print to console to review the deviance and Chi Df
+print(anova_res)
+
+# Extract the omnibus p-value for your simulation loop
+# The p-value is located in the second row of the Pr(>Chisq) column
+sim_p_value <- as.numeric(anova_res$`P.value`[2])
+
+# This will automatically generate appropriate, 
+# zero-smoothed QQ and residual plots for your Tweedie data!
 par(mfrow = c(1, 2))
-plot(model_null, which = 1:2, var.colors = 1)
-
-
-coefplot(model_full) #shows the 10% effect.
+plot(m_full_wide, which = 1:2)
 
 ## New data - example of testing with sites, locations, env parameters, etc.
 # http://jenniniku.github.io/gllvm/articles/vignette2.html
-
-
