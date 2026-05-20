@@ -183,7 +183,7 @@ res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x,
 # Combine results into a 500-row table
 res_permute <- list_rbind(res_p_list, names_to = "set")
 
-## Univariate GLMM -----------------------------------------------------------------------------------------------------
+## Univariate GLM -----------------------------------------------------------------------------------------------------
 
 res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
 res_g <- list_rbind(res_g, names_to = "set")
