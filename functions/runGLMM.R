@@ -1,6 +1,6 @@
 runGLMM <- function(dat, metric) {
   dat[,"met"] <- dat[,metric]
-  dat$metz <- dat$met + ifelse(dat$met==0,jitter(.001),0) #remove 0s for log link
+  dat$metz <- dat$met
   
   glm1 <- gam(metz ~ 1+factor(obs), #gam without a smoother is a glm
               family=tw(link="log"),

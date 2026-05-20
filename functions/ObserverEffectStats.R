@@ -42,7 +42,7 @@ ObserverEffectStats <- function(trips, metrics, nperm_mvglm, nboot_triplet, nper
     adon_formula = paste(adon_formula, "+", mv_addvar)
   }
   
-  adon <- vegan::adonis2(as.formula(adon_formula), data = trips, permutations = nperm_adon, method="euclidean")
+  adon <- vegan::adonis2(as.formula(adon_formula), data = trips, permutations = nperm_adon, method="bray")
   permanova <- data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
   
   
