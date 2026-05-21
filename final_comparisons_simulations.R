@@ -218,14 +218,65 @@ res_p %>%
   group_by(bp_level) %>% 
   summarize(mean(perma_p<0.05))
 
-## *Save all but mvglm --------------------------------------------------------------------------------------------------
+
+# MvGLM_TMB ------------------------------------------------------------------------------------------------------------
+#This performs a Tweedie MvGLM using the glmmTMB package
+
+trips_long <- trips %>%
+  pivot_longer(
+    cols = c(sp_1, sp_2),
+    names_to = "species",
+    values_to = "biomass"
+  ) %>%
+  mutate(species = factor(species),
+         obs = factor(obs))
+
+head(trips_long)
+
+# Fit the Null Model (Intercepts only per species)
+m_null <- glmmTMB(
+  biomass ~ 0 + species, 
+  data = trips_long, 
+  family = tweedie(link = "log")
+)
+
+# Fit the Full Model (Species intercepts + Observer effect per species)
+m_full <- glmmTMB(
+  biomass ~ 0 + species + species:obs, 
+  data = trips_long, 
+  family = tweedie(link = "log")
+)
+
+# Run the Likelihood Ratio Test (ANOVA)
+anova_results <- anova(m_null, m_full)
+print(anova_results)
+anova_results$`Pr(>Chisq)`[2]
+m_full_wide$Power #estimated tweedie power
+
+#Not needed but somewhat useful - residuals
+library(DHARMa)
+# Generate simulated residuals for the full model
+sim_res <- simulateResiduals(fittedModel = m_full, n = 500)
+
+# Plot the diagnostics
+# This produces two plots: 
+# 1. A QQ plot to detect deviations from the expected distribution.
+# 2. A residuals vs. predicted plot to check for heteroscedasticity.
+plot(sim_res)
+
+# MvGLM_gllvm ----------------------------------------------------------------------------------------------------------
+#This performs a Tweedie MvGLM using the gllvm package
+
+
+
+## *Save all but MvGLMperm --------------------------------------------------------------------------------------------------
 
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
-## MVGLM ---------------------------------------------------------------------------------------------------------------
+## MVGLMperm ---------------------------------------------------------------------------------------------------------------
 
 res_m <- imap(1:length(trip_sets_adj), ~{
   print(paste0("***set ", .x, " ", now()))
