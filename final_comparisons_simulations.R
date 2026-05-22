@@ -9,7 +9,7 @@
 library(tidyverse)
 library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
-library(mgcv)         # for gam
+library(glmmTMB)
 library(lme4)
 library(tweedie)
 
@@ -18,6 +18,7 @@ source("functions/TripletAnalysis.R")
 source("functions/getDescriptiveStats.R")
 source("functions/runTandFtests.R")
 source("functions/runGLMM.R")
+source("functions/MvGLMglmm.R")
 source("functions/assign_sig.R")
 source("functions/ObserverEffectStats.R")
 source("functions/perm_fxn.R")
@@ -144,7 +145,7 @@ res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x,
 # Combine results into a 500-row table
 res_permute <- list_rbind(res_p_list, names_to = "set")
 
-## Univariate GLMM -----------------------------------------------------------------------------------------------------
+## Univariate GLM -----------------------------------------------------------------------------------------------------
 
 res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
 res_g <- list_rbind(res_g, names_to = "set")
@@ -164,6 +165,11 @@ res_tt %>%
   group_by(bp_level) %>% 
   summarize(mean(KSp < 0.05), mean(ci_lo > 0 | ci_hi < 0))
 
+# MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
+res_MvGLMglmm <- map(trip_sets_adj[1:10], ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
+res_MvGLMglmm  <- list_rbind(res_MvGLMglmm, names_to = "set")
+
+#boxplot(res_MvGLMglmm$pwr_glmm)
 ## Permanova -----------------------------------------------------------------------------------------------------------
 
 adon_formula = "Y~factor(obs)"
@@ -182,7 +188,7 @@ res_p %>%
 ## *Save all but mvglm --------------------------------------------------------------------------------------------------
 
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, file = allbutmv_name)
+save(trip_sets, trip_sets_adj, res_g, res_p, res_MvGLMglmm, res_permute, res_t, res_tt, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
