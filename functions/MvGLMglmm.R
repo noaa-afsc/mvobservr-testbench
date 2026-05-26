@@ -18,12 +18,12 @@ MvGLMglmm <- function(dat) {
     data.frame(
       p_glmm       = anova(m_null, m_full)$`Pr(>Chisq)`[2],
       pwr_glmm     = unname(family_params(m_full)),
-      runtime_secs = as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+      runtime_secs_glmm = as.numeric(difftime(Sys.time(), start_time, units = "secs"))
     )
     
   }, error = function(e) {
     # If any error or convergence failure occurs, return entirely blank rows
-    data.frame(p_glmm = NA_real_, pwr_glmm = NA_real_, runtime_secs = NA_real_)
+    data.frame(p_glmm = NA_real_, pwr_glmm = NA_real_, runtime_secs_glmm = NA_real_)
   })
 }
 

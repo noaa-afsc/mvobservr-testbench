@@ -8,6 +8,8 @@ output: html_notebook
 library(tidyverse)
 library(tweedie)
 library(lme4)
+library(glmmTMB)
+source("functions/MvGLMglmm.R")
 library(vegan)
 library(gdrive)
 library(mvobservr) # devtools::install_github("noaa-afsc/mvobservr")
@@ -151,19 +153,27 @@ res_p <- map(trip_sets_adj, ~{
 res_p <- list_rbind(res_p, names_to = "set")
 ```
 
-
 ##mvglm
-  60 sets x 100 perm  = 30 min on laptop using 12 cores = 0.50m/s = 0.00500m/s/p
-  60 sets x 200 perm  = 45 min on laptop using 12 cores = 0.75m/s = 0.00375m/s/p
-  10 sets x 1000 perm = 17 min                          = 1.70m/s = 0.00170m/s/p
 ```{r}
+#with glmmTMB
+res_glmm <- map(trip_sets_adj, ~ MvGLMglmm(.x), .progress = TRUE
+) %>% list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
+
+```
+
+
+```{r}
+#with mvobservr
+ # 60 sets x 100 perm  = 30 min on laptop using 12 cores = 0.50m/s = 0.00500m/s/p
+ # 60 sets x 200 perm  = 45 min on laptop using 12 cores = 0.75m/s = 0.00375m/s/p
+ # 10 sets x 1000 perm = 17 min                          = 1.70m/s = 0.00170m/s/p
 res_m <- imap(1:length(trip_sets_adj), ~{
   print(paste0("***set ", .x, " ", now()))
   trip_sets_adj[[.x]] %>%
       mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
       pivot_longer(cols=starts_with("sp_"),
                    names_to = 'species', values_to = 'biomass') %>%
-      mvglm_obs(block = NULL, add_var = NULL, n_permutations= n_permutations, nCores = 12) %>%
+      mvglm_obs(block = NULL, add_var = NULL, n_permutations= n_permutations, nCores = TRUE) %>%
       pluck("results") %>%
       {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
       pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
@@ -178,6 +188,7 @@ res_m <- list_rbind(res_m, names_to = "set") %>%
 res_comb <- map(trip_sets_adj, ~ .x[1, c("param_mod", "param_value")]) %>%
   list_rbind(names_to = "set") %>%
   left_join(res_p, by="set") %>%
+  left_join(res_glmm, by=c("set","metric")) %>%
   left_join(res_m, by=c("set","metric"))
 res_comb
 

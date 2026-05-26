@@ -167,6 +167,7 @@ res_tt %>%
   summarize(mean(KSp < 0.05), mean(ci_lo > 0 | ci_hi < 0))
 
 # MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
+
 res_MvGLMglmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
 res_MvGLMglmm  <- list_rbind(res_MvGLMglmm, names_to = "set")
 

@@ -3,6 +3,7 @@ library(tidyverse)
 library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
 library(mgcv)         # for gam
+library(glmmTMB)
 library(lme4)
 library(tweedie)
 
