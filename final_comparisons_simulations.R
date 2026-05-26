@@ -167,7 +167,7 @@ res_tt %>%
   summarize(mean(KSp < 0.05), mean(ci_lo > 0 | ci_hi < 0))
 
 # MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
-res_MvGLMglmm <- map(trip_sets_adj[1:10], ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
+res_MvGLMglmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
 res_MvGLMglmm  <- list_rbind(res_MvGLMglmm, names_to = "set")
 
 #boxplot(res_MvGLMglmm$pwr_glmm)
@@ -189,7 +189,7 @@ res_p %>%
 ## *Save all but mvglm --------------------------------------------------------------------------------------------------
 
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_MvGLMglmm, res_permute, res_t, res_tt, file = allbutmv_name)
+save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_MvGLMglmm, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
