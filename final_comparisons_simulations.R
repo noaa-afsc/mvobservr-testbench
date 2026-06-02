@@ -257,7 +257,7 @@ res_m %>%
   group_by(bp_level) %>% 
   summarize(mean(mvglm_p<0.05))
 
-## *Save and upload mvglm results --------------------------------------------------------------------------------------
+## *Save and upload mvobservr results --------------------------------------------------------------------------------------
 
 mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
@@ -280,6 +280,7 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_tt, by = "set") %>%
   left_join(res_p, by = "set") %>%
   left_join(res_m, by = "set") %>%
+  left_join(res_MvGLMglmm , by = "set") %>%
   left_join(res_permute, by = "set")
 res_comb
 
