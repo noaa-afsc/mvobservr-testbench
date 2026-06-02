@@ -164,7 +164,7 @@ res_g <- list_rbind(res_g, names_to = "set")
 res_g %>% 
   mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
-  summarize(mn = mean(glm_mgcv_p<=0.05, na.rm = TRUE), 
+  summarize(mn = mean(glm_mgcv_p<0.05, na.rm = TRUE), 
             n_success_of_100 = sum(!is.na(glm_mgcv_p)))
 
 gc(verbose = FALSE)
@@ -268,16 +268,16 @@ output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVEC
 
 res_fp <- res_comb %>%
   mutate(
-    # Standard p-value threshold is <= 0.05
-    t_test_sig      = ifelse(tp <= 0.05, 1, 0),
-    f_test_sig      = ifelse(Fp <= 0.05, 1, 0),
-    permu_sig       = ifelse(p_val <= 0.05, 1, 0),
+    # Standard p-value threshold is < 0.05
+    t_test_sig      = ifelse(tp < 0.05, 1, 0),
+    f_test_sig      = ifelse(Fp < 0.05, 1, 0),
+    permu_sig       = ifelse(p_val < 0.05, 1, 0),
     # AIC logic: significant if converged AND delta AIC >= 2
     dAIC_sig        = ifelse(glmconv == 1, ifelse(AICd >= 2, 1, 0), NA),
-    KS_test_sig     = ifelse(KSp <= 0.05, 1, 0),
+    KS_test_sig     = ifelse(KSp < 0.05, 1, 0),
     median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
-    mvglm_sig       = ifelse(mvglm_p <= 0.05, 1, 0),
-    perma_sig       = ifelse(perma_p <= 0.05, 1, 0)
+    mvglm_sig       = ifelse(mvglm_p < 0.05, 1, 0),
+    perma_sig       = ifelse(perma_p < 0.05, 1, 0)
   ) %>%
   select(ends_with("sig")) %>%
   pivot_longer(

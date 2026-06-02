@@ -229,7 +229,7 @@ perf_plot_dat <-
   res_comb_tbl %>%
   pivot_longer(cols=c(perma_p, mvglm_p), names_to = "Test", values_to = "p") %>%
   group_by(param_mod, param_value, Test) %>%
-  summarize(psig = mean(p<=0.05), 
+  summarize(psig = mean(p<0.05), 
             num = n(),
             se = sqrt((psig * (1 - psig)) / num), .groups="drop") %>%
   inner_join(params_to_test, by=c("param_mod" = "param")) %>%

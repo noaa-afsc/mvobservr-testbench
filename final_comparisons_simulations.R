@@ -192,7 +192,7 @@ res_g <- list_rbind(res_g, names_to = "set")
 res_g %>% 
   mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
-  summarize(mn = mean(glm_mgcv_p<=0.05, na.rm = TRUE), 
+  summarize(mn = mean(glm_mgcv_p<0.05, na.rm = TRUE), 
             n_success_of_100 = sum(!is.na(glm_mgcv_p)))
 
 gc(verbose = FALSE)
