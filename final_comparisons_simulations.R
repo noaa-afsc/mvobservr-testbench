@@ -9,8 +9,8 @@
 library(tidyverse)
 library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
-library(mgcv)
-library(glmmTMB)
+library(mgcv) #univariate glm
+library(glmmTMB) #MvGLM   
 library(lme4)
 library(tweedie)
 
@@ -66,6 +66,8 @@ nvess <- 1
 ntrips <- 500
 # Set target Berger-Parker index (dominance) levels.
 target_bp_levels <- seq(0.5, 0.9, by = 0.1)
+# Set scalar for Tweedie distributions
+mu_scalar <- 100
 
 #'`====================================================================================================================`
 
@@ -78,13 +80,37 @@ if(set_number == 1) {
 } else stop("'set_number' needs to be specified as '1' or '2'!")
 
 trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
-  #set up data frame for trips
-  catches <- data.frame(uid = 1:ntrips)
   
-  #create catches
-  catches$sp_1 <- rtweedie(ntrips, p = tweedie_power, mu = 100*target_bp_levels[.x], phi = phi)
-  catches$sp_2 <- rtweedie(ntrips, p = tweedie_power, mu = 100*(1-target_bp_levels[.x]), phi = phi)
-  # the 100 acts as a raising factor to get away from a lot of 0s
+  # 1. Generate data until we have enough valid rows
+  # We generate a bit extra (e.g., 20% more) to reduce the chance of needing a second loop
+  valid_catches <- data.frame()
+  
+  while(nrow(valid_catches) < ntrips) {
+    # Determine how many more rows we need
+    needed <- ntrips - nrow(valid_catches)
+    # Oversampling slightly (1.5x) to ensure we hit the target in one go
+    batch_size <- ceiling(needed * 1.5) 
+    
+    #set up data frame for trips
+    temp_catches <- data.frame(id = 1:batch_size)
+    
+    #create catches
+    temp_catches$sp_1 <- rtweedie(batch_size, p = tweedie_power, mu = mu_scalar*target_bp_levels[.x], phi = phi)
+    temp_catches$sp_2 <- rtweedie(batch_size, p = tweedie_power, mu = mu_scalar*(1-target_bp_levels[.x]), phi = phi)
+    # the 100 acts as a raising factor to get away from a lot of 0s
+    
+    # Keep only rows where at least one species is > 0
+    temp_catches <- temp_catches %>% filter(sp_1 > 0 | sp_2 > 0)
+    
+    valid_catches <- bind_rows(valid_catches, temp_catches)
+  }
+  
+  # 2. Trim to exactly ntrips and add UID
+  catches <- valid_catches %>%
+    slice(1:ntrips) %>%
+    select(-id) %>% #drop temp id
+    mutate(uid = 1:ntrips)
+  
   
   #standardize catches
   catches <- catches %>%
@@ -111,6 +137,19 @@ trip_sets_adj <- map(trip_sets, ~{.x %>%
            biomass_total = sp_1 + sp_2
     )
 }, .progress = TRUE)
+
+
+## Check number of trips with 0 biomass
+map(trip_sets_adj, ~{
+  .x %>%
+    summarize(propdouble0s = mean(sp_1 == 0 & sp_2 == 0))
+}) %>%
+  list_rbind() %>%
+  count(propdouble0s)
+
+
+## Check distribution of overall bias
+ ### bias applied at trip level
 
 map(trip_sets_adj, ~{
   .x %>%
@@ -154,7 +193,10 @@ res_g <- list_rbind(res_g, names_to = "set")
 res_g %>% 
   mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
-  summarize(mean(AICd>2))
+  summarize(mn = mean(glm_mgcv_p<0.05, na.rm = TRUE), 
+            n_success_of_100 = sum(!is.na(glm_mgcv_p)))
+
+gc(verbose = FALSE)
 
 ## Triplet Analysis ----------------------------------------------------------------------------------------------------
 
@@ -177,7 +219,7 @@ res_MvGLMglmm  <- list_rbind(res_MvGLMglmm, names_to = "set")
 adon_formula = "Y~factor(obs)"
 res_p <- map(trip_sets_adj, ~{
   Y <- .x %>% dplyr::select(starts_with("sp_"))
-  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = nperm, method="euclidean")
+  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = nperm, method="bray")
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
 }, .progress=TRUE) #45min for 500
 res_p <- list_rbind(res_p, names_to = "set")
@@ -187,14 +229,14 @@ res_p %>%
   group_by(bp_level) %>% 
   summarize(mean(perma_p<0.05))
 
-## *Save all but mvglm --------------------------------------------------------------------------------------------------
+## *Save all but MvGLMperm --------------------------------------------------------------------------------------------------
 
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_MvGLMglmm, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
-## MVGLM ---------------------------------------------------------------------------------------------------------------
+## MVGLMperm ---------------------------------------------------------------------------------------------------------------
 
 res_m <- imap(1:length(trip_sets_adj), ~{
   print(paste0("***set ", .x, " ", now()))
