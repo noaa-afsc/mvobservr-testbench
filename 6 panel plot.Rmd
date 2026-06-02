@@ -16,8 +16,6 @@ batch <- 1  # 1 or 2
 output_name <- paste0("output_data/param_plot_batch", batch, ".Rdata")
 ```
 
-
-
 ```{r simulation_setup}
 # Constants
 
@@ -46,7 +44,6 @@ trip_coverage <- 0.25
 mu_scalar <- 100
 
 ```
-
 
 ```{r}
 # Set up varying parameters and their levels
@@ -84,7 +81,6 @@ param_values_df <- params_to_test %>%
   select(-name)
 ```
 
-
 ```{r generatedata}
 # for reproducibility
 if(batch == 1) {
@@ -98,12 +94,37 @@ trip_sets_adj <- map(rep(1:nrow(param_values_df), n_samples_per_level), ~{
   assign(param_values_df$param[.x], param_values_df$param_val[.x])
   #print(paste(bp_level, ntrips, tweedie_power, mu_scalar, phi, fixed_total_biomass, trip_coverage))
   
-  #set up data frame for trips
-  catches <- data.frame(uid = 1:ntrips)
-
-  #create catches
-  catches$sp_1 <- rtweedie(ntrips, p = tweedie_power, mu = mu_scalar*bp_level, phi = phi)
-  catches$sp_2 <- rtweedie(ntrips, p = tweedie_power, mu = 100*(1-bp_level), phi = phi)
+  # 1. Generate data until we have enough valid rows
+  # We generate a bit extra (e.g., 20% more) to reduce the chance of needing a second loop
+  valid_catches <- data.frame()
+  
+  while(nrow(valid_catches) < ntrips) {
+    # Determine how many more rows we need
+    needed <- ntrips - nrow(valid_catches)
+    # Oversampling slightly (1.5x) to ensure we hit the target in one go
+    batch_size <- ceiling(needed * 1.5) 
+    
+    #set up data frame for trips
+    temp_catches <- data.frame(id = 1:batch_size)
+    
+    #create catches
+    temp_catches$sp_1 <- rtweedie(batch_size, p = tweedie_power,mu = mu_scalar*bp_level, phi = phi)
+    temp_catches$sp_2 <- rtweedie(batch_size, p = tweedie_power, mu = mu_scalar*(1-bp_level), phi = phi)
+    # the 100 acts as a raising factor to get away from a lot of 0s
+    
+    # Keep only rows where at least one species is > 0
+    temp_catches <- temp_catches %>% filter(sp_1 > 0 | sp_2 > 0)
+    
+    valid_catches <- bind_rows(valid_catches, temp_catches)
+  }
+  
+  # 2. Trim to exactly ntrips and add UID
+  catches <- valid_catches %>%
+    slice(1:ntrips) %>%
+    select(-id) %>% #drop temp id
+    mutate(uid = 1:ntrips)
+  
+  
 
   #standardize catches
   catches <- catches %>%
@@ -138,14 +159,13 @@ trip_sets_adj <- map(rep(1:nrow(param_values_df), n_samples_per_level), ~{
 
 ```
 
-
 ##permanova
 ```{r}
 adon_formula = "Y~factor(obs)"
 
 res_p <- map(trip_sets_adj, ~{
   Y <- .x %>% dplyr::select(starts_with("sp_"))
-  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = n_permutations, method="euclidean")
+  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = n_permutations, method="bray")
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
 }, .progress=TRUE) #1 min for 60 sets
 res_p <- list_rbind(res_p, names_to = "set")
@@ -172,7 +192,6 @@ res_m <- list_rbind(res_m, names_to = "set") %>%
   filter(metric == "biomass_total")
 ```
 
-
 #combine output
 ```{r}
 res_comb <- map(trip_sets_adj, ~ .x[1, c("param_mod", "param_value")]) %>%
@@ -185,16 +204,12 @@ res_comb
 save(res_comb, file = output_name)
 ```
 
-
-
 #upload files to gdrive
   only once when transferring from data ran on cloud workstation
 ```{r}
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
 gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble)
 ```
-
-
 
 #pull down and load data files from gdrive
 ```{r}
@@ -214,7 +229,7 @@ perf_plot_dat <-
   res_comb_tbl %>%
   pivot_longer(cols=c(perma_p, mvglm_p), names_to = "Test", values_to = "p") %>%
   group_by(param_mod, param_value, Test) %>%
-  summarize(psig = mean(p<=0.05), 
+  summarize(psig = mean(p<0.05), 
             num = n(),
             se = sqrt((psig * (1 - psig)) / num), .groups="drop") %>%
   inner_join(params_to_test, by=c("param_mod" = "param")) %>%
@@ -233,7 +248,7 @@ perf_plot_dat <-
                          #convert to number of trips
                          TRUE ~ defaults))
 
-pd <- position_dodge(width = 0.4) # Now 0.4 means "40% of the gap between points"
+pd <- position_dodge(width = 0.1) # Now 0.4 means "40% of the gap between points"
 
 perf_plot <- ggplot(perf_plot_dat, 
                     aes(x = factor(param_value), # Treat X as labels, not numbers
