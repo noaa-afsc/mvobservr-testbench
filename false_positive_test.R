@@ -47,7 +47,7 @@ fixed_total_biomass <- 1000000
 # Vessel needs to be defined for some of the analyses
 nvess <- 1
 # Set how many populations per scenario to generate
-n_samples_per_level <- 500                           #' *Increased from 100 to 500*
+n_samples_per_level <- 500                          #' *Increased from 100 to 500*
 # Set the number of trips 
 ntrips <- 500
 # Set scalar for Tweedie distributions
