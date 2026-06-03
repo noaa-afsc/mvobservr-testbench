@@ -47,7 +47,7 @@ fixed_total_biomass <- 1000000
 # Vessel needs to be defined for some of the analyses
 nvess <- 1
 # Set how many populations per scenario to generate
-n_samples_per_level <- 500                                #' *Increased from 100 to 500*
+n_samples_per_level <- 500                           #' *Increased from 100 to 500*
 # Set the number of trips 
 ntrips <- 500
 # Set scalar for Tweedie distributions
@@ -208,25 +208,39 @@ save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_MvG
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
-## MVGLM ---------------------------------------------------------------------------------------------------------------
+## MvGLM permutation ---------------------------------------------------------------------------------------------------------------
+# mvobservr
 
-res_m <- imap(1:length(trip_sets_adj), ~{
-  print(paste0("***set ", .x, " ", now()))
-  trip_sets_adj[[.x]] %>%
-    mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
+res_m <- imap(trip_sets_adj, ~{
+  start_time <- Sys.time()
+  
+  processed_df <- .x %>%
+    mutate(observed = ifelse(obs == 1, 'Y', 'N')) %>%
     pivot_longer(cols = starts_with("sp_"),
                  names_to = 'species', values_to = 'biomass') %>%
-    mvglm_obs(block = NULL, add_var = NULL, n_permutations = nperm, nCores = TRUE) %>%
-    pluck("results") %>%
+    # --- MUZZLE MVGLM_OBS HERE ---
+    {
+      capture.output(suppressMessages(
+        out <- mvglm_obs(., block = NULL, add_var = NULL, n_permutations = nperm, nCores = TRUE)
+      ))
+      out
+    } %>%
+    # -----------------------------
+  pluck("results") %>%
     {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
-    pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
-})
+    pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p")
+  
+  elapsed_time <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+  
+  processed_df %>%
+    mutate(runtime_secs_mvglm_p = elapsed_time)
+}, .progress = "Processing sets")
+
+# Combine everything and filter
 res_m <- list_rbind(res_m, names_to = "set") %>%
   filter(metric == "biomass_total")
 
 res_m %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
   summarize(mean(mvglm_p<0.05))
 
 ## *Save and upload mvglm results --------------------------------------------------------------------------------------
@@ -257,6 +271,7 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_tt, by = "set") %>%
   left_join(res_p, by = "set") %>%
   left_join(res_m, by = "set") %>%
+  left_join(res_MvGLMglmm, by = "set") %>%
   left_join(res_permute, by = "set")
 res_comb
 
