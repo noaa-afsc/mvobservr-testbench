@@ -294,11 +294,11 @@ res_fp <- res_comb %>%
     t_test_sig      = ifelse(tp < 0.05, 1, 0),
     f_test_sig      = ifelse(Fp < 0.05, 1, 0),
     permu_sig       = ifelse(p_val < 0.05, 1, 0),
-    # AIC logic: significant if converged AND delta AIC >= 2
-    dAIC_sig        = ifelse(glmconv == 1, ifelse(AICd >= 2, 1, 0), NA),
+    glm_mgcv_sig    = ifelse(glm_mgcv_p < 0.05, 1, 0),
     KS_test_sig     = ifelse(KSp < 0.05, 1, 0),
     median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
     mvglm_sig       = ifelse(mvglm_p < 0.05, 1, 0),
+    mvglmTMB_sig    = ifelse(p_glmm < 0.05, 1, 0),  #TODO right metric?
     perma_sig       = ifelse(perma_p < 0.05, 1, 0)
   ) %>%
   select(ends_with("sig")) %>%
@@ -309,11 +309,11 @@ res_fp <- res_comb %>%
   ) %>%
   mutate(test = factor(
     test, 
-    levels  = c("t_test_sig", "dAIC_sig", "f_test_sig", "permu_sig", "mvglm_sig",  
-                "KS_test_sig", "perma_sig", "median_test_sig"),
+    levels  = c("t_test_sig", "glm_mgcv_sig", "f_test_sig", "permu_sig", "mvglm_sig",  
+                "KS_test_sig", "perma_sig", "median_test_sig", "mvglmTMB_sig"),
     ordered = TRUE,
-    labels  = c("t-test", "GLM", "F test", "Permutation","MvGLM",  
-                "K-S test", "PERMANOVA", "Median")
+    labels  = c("t-test", "GLM", "F test", "Permutation","MvGLM perm",  
+                "K-S test", "PERMANOVA", "Median", "MvGLM TMB")
   ))
 
 set.seed(123) # Ensure reproducibility for the bootstrap
@@ -325,8 +325,7 @@ fpr_plot <- map(1:n_bootstraps, ~{
 }) %>%
   list_rbind() %>%
   group_by(boot, test) %>%
-  # Use na.rm = TRUE because dAIC_sig contains NAs for non-convergence
-  summarize(pctsig = mean(sig, na.rm = TRUE), .groups = "drop") %>%
+  summarize(pctsig = mean(sig), .groups = "drop") %>%
   ggplot(aes(x = test, y = pctsig)) + #fill was = test
   geom_violin(alpha = 0.5, fill = 'black', quantiles = c(0.25, 0.5, 0.75), 
               quantile.linetype = 1, quantile.color = "white") +
