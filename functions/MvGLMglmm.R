@@ -7,7 +7,8 @@ MvGLMglmm <- function(dat) {
       pivot_longer(cols = starts_with("sp_"), names_to = "species", values_to = "biomass") %>%
       mutate(species = factor(species), obs = factor(obs))
     
-    # 2. Fit models
+    # 2. Fit models 
+    # https://www.jstatsoft.org/article/view/v112i01 for source doc and example on how to use with boot and nested models
     m_null <- glmmTMB(biomass ~ 0 + species, data = long, family = tweedie(link = "log"))
     m_full <- glmmTMB(biomass ~ 0 + species + species:obs, data = long, family = tweedie(link = "log"))
     
