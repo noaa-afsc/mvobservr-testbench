@@ -185,6 +185,11 @@ res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x,
 # Combine results into a 500-row table
 res_permute <- list_rbind(res_p_list, names_to = "set")
 
+res_permute %>% 
+  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mn = mean(p_val<0.05, na.rm = TRUE))
+
 ## Univariate GLM -----------------------------------------------------------------------------------------------------
 
 res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
