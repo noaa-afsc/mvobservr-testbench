@@ -266,9 +266,10 @@ gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
 #'`====================================================================================================================`
 
 # Save Batch Results ===================================================================================================
-
-load(gdrive_download(mvglm_name, output_dribble))
-load(gdrive_download(allbutmv_name, output_dribble))
+if(set_skip_prompt != F){
+  load(gdrive_download(mvglm_name, output_dribble))
+  load(gdrive_download(allbutmv_name, output_dribble))
+}
 
 res_comb <- map(trip_sets_adj, ~{
   .x %>%
