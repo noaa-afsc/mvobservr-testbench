@@ -213,6 +213,10 @@ res_tt %>%
 res_MvGLMglmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
 res_MvGLMglmm  <- list_rbind(res_MvGLMglmm, names_to = "set")
 
+res_MvGLMglmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(p_glmm < 0.05))
+
 #boxplot(res_MvGLMglmm$pwr_glmm)
 ## Permanova -----------------------------------------------------------------------------------------------------------
 
