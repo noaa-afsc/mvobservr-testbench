@@ -143,7 +143,8 @@ power_fig_dat <-
            KS_test_sig = ifelse(KSp < 0.05, 1, 0),
            median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
            mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
-           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+           perma_sig = ifelse(perma_p < 0.05, 1, 0),
+           glmm_sig  = ifelse(p_glmm < 0.05, 1, 0)
     ) %>%
   group_by(effsize, bp_level) %>%
   summarize(
@@ -163,10 +164,10 @@ power_fig_dat <-
   mutate(Test = factor(Test, 
                        levels = c("t_test_sig", "f_test_sig",
                                   "KS_test_sig","median_test_sig","permu_sig",
-                                  "glm_mgcv_sig", "mvglm_sig", "perma_sig"),
+                                  "glm_mgcv_sig", "mvglm_sig", "perma_sig", "glmm_sig"),
                        labels = c("t-test", "F test", 
                                   "K-S test", "Median","Permutation", 
-                                  "GLM", "MvGLM", "PERMANOVA"))) %>%
+                                  "GLM", "pMvGLM", "PERMANOVA", "MvGLM"))) %>%
   mutate(effsize = paste0(effsize, " Observer Effect (%)"))
 
 # Make the Figure
@@ -180,7 +181,8 @@ highlight_colors <- c(
   "black", #"#BAA9C7",
   "#C7A477",
   "#E41A1C", # MvGLM (Red)
-  "#377EB8"  # PERMANOVA (Blue)
+  "#377EB8",  # PERMANOVA (Blue)
+  "cyan3" #glmmTMB MvGLM
 )
 
 # 2. The Final Clean Plot
@@ -196,7 +198,7 @@ power_plot <- ggplot(power_fig_dat,
               show.legend = FALSE) + 
   
   # --- LINE LAYER ---
-  geom_line(aes(linewidth = Test %in% c("MvGLM", "PERMANOVA"))) +
+  geom_line(aes(linewidth = Test %in% c("pMvGLM", "PERMANOVA", "MvGLM"))) +
   
   # --- POINT LAYER ---
   # Uniform size as requested
@@ -207,7 +209,7 @@ power_plot <- ggplot(power_fig_dat,
   scale_fill_manual(values = highlight_colors) +
   
   # Ribbon transparency: Background is faint, Focus is visible
-  scale_alpha_manual(values = c(rep(0.2, 6), 0.4, 0.4), guide = "none") +
+  scale_alpha_manual(values = c(rep(0.2, 6), 0.4, 0.4, 0.4), guide = "none") +
   
   # Line thickness for visual pop
   scale_linewidth_manual(values = c(0.6, 1), guide = "none") + 
