@@ -4,6 +4,7 @@ library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
 library(mgcv)         # for gam
 library(glmmTMB)
+library(gllvm)
 library(lme4)
 library(tweedie)
 
@@ -13,6 +14,7 @@ source("functions/getDescriptiveStats.R")
 source("functions/runTandFtests.R")
 source("functions/runGLMM.R")
 source("functions/MvGLMglmm.R")
+source("functions/MvGLMgllvm.R")
 source("functions/assign_sig.R")
 source("functions/ObserverEffectStats.R")
 source("functions/perm_fxn.R")
@@ -188,12 +190,21 @@ res_tt %>%
 
 # MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
 
-res_MvGLMglmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
-res_MvGLMglmm  <- list_rbind(res_MvGLMglmm, names_to = "set")
+res_glmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
+res_glmm  <- list_rbind(res_glmm, names_to = "set")
 
-res_MvGLMglmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
   summarize(mean(p_glmm < 0.05))
+
+# MvGLM with GLLVM ----------------------------------------------------------------------------------------------------------------
+
+res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE)
+res_gllvm  <- list_rbind(res_gllvm, names_to = "set")
+
+res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(p_gllvm < 0.05))
 
 ## Permanova -----------------------------------------------------------------------------------------------------------
 
@@ -280,7 +291,8 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_tt, by = "set") %>%
   left_join(res_p, by = "set") %>%
   left_join(res_m, by = "set") %>%
-  left_join(res_MvGLMglmm, by = "set") %>%
+  left_join(res_glmm, by = "set") %>%
+  left_join(res_gllvm, by = "set") %>%
   left_join(res_permute, by = "set")
 res_comb
 
@@ -300,15 +312,16 @@ output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVEC
 res_fp <- res_comb %>%
   mutate(
     # Standard p-value threshold is < 0.05
-    t_test_sig      = ifelse(tp < 0.05, 1, 0),
-    f_test_sig      = ifelse(Fp < 0.05, 1, 0),
-    permu_sig       = ifelse(p_val < 0.05, 1, 0),
-    glm_mgcv_sig    = ifelse(glm_mgcv_p < 0.05, 1, 0),
-    KS_test_sig     = ifelse(KSp < 0.05, 1, 0),
+    t_test_sig = ifelse(tp < 0.05, 1, 0),
+    f_test_sig = ifelse(Fp < 0.05, 1, 0),
+    glm_mgcv_sig = ifelse(glm_mgcv_p <= 0.05, 1, 0), 
+    KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+    permu_sig = ifelse(p_val < 0.05, 1, 0), #permutation
     median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
-    mvglm_sig       = ifelse(mvglm_p < 0.05, 1, 0),
-    mvglmTMB_sig    = ifelse(p_glmm < 0.05, 1, 0),  #TODO right metric?
-    perma_sig       = ifelse(perma_p < 0.05, 1, 0)
+    mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+    gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
+    perma_sig = ifelse(perma_p < 0.05, 1, 0), #permanova
+    glmm_sig = ifelse(p_glmm < 0.05, 1, 0)
   ) %>%
   select(ends_with("sig")) %>%
   pivot_longer(
@@ -319,10 +332,10 @@ res_fp <- res_comb %>%
   mutate(test = factor(
     test, 
     levels  = c("t_test_sig", "glm_mgcv_sig", "f_test_sig", "permu_sig", "mvglm_sig",  
-                "KS_test_sig", "perma_sig", "median_test_sig", "mvglmTMB_sig"),
+                "KS_test_sig", "perma_sig", "median_test_sig", "glmm_sig", "gllvm_sig"),
     ordered = TRUE,
-    labels  = c("t-test", "GLM", "F test", "Permutation","MvGLM perm",  
-                "K-S test", "PERMANOVA", "Median", "MvGLM TMB")
+    labels  = c("t-test", "GLM", "F test", "Permutation","mvobservr",  
+                "K-S test", "PERMANOVA", "Median", "glmm", "gllvm")
   ))
 
 set.seed(123) # Ensure reproducibility for the bootstrap
