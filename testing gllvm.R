@@ -204,7 +204,7 @@ testZeroInflation(sim_res)
 
 ## using Latent variable gllvm ----
 # 1. Isolate the response matrix (Y)
-Y <- as.matrix(trips[, c("sp_1", "sp2")])
+Y <- as.matrix(trips[, c("sp_1", "sp_2")])
 
 # 2. Isolate the predictor data frame (X)
 X <- trips %>% select(obs)
@@ -242,5 +242,15 @@ sim_p_value <- as.numeric(anova_res$`P.value`[2])
 par(mfrow = c(1, 2))
 plot(m_full_wide, which = 1:2)
 
+coefplot(m_full_wide)
+
+#intro desciption here: https://jenniniku.github.io/gllvm/articles/vignette1.html
 ## New data - example of testing with sites, locations, env parameters, etc.
 # http://jenniniku.github.io/gllvm/articles/vignette2.html
+
+data(antTraits)
+y <- as.matrix(antTraits$abund)
+X <- scale(as.matrix(antTraits$env))
+TR <- antTraits$traits
+suppressWarnings(gllvm(y, X, family = "negative.binomial"))
+
