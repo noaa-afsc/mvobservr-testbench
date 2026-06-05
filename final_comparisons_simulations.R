@@ -232,10 +232,10 @@ res_p %>%
 
 # MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
 
-res_MvGLMglmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
-res_MvGLMglmm  <- list_rbind(res_MvGLMglmm, names_to = "set")
+res_glmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
+res_glmm  <- list_rbind(res_glmm, names_to = "set")
 
-res_MvGLMglmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
   summarize(mean(p_glmm < 0.05))
 
@@ -301,8 +301,8 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_tt, by = "set") %>%
   left_join(res_p, by = "set") %>%
   left_join(res_m, by = "set") %>%
-  left_join(res_MvGLMglmm , by = "set") %>%
-  left_join(res_MvGLMgllvm , by = "set") %>%
+  left_join(res_glmm , by = "set") %>%
+  left_join(res_gllvm , by = "set") %>%
   left_join(res_permute, by = "set")
 res_comb
 
