@@ -53,7 +53,7 @@ trip_coverage <- 0.25
 # For tests using permutations or bootstraps, set the number of iterations
 nperm <- 1000 
 # Set how many populations per scenario to generate
-n_samples_per_level <- 10
+n_samples_per_level <- 100
 # Set the Tweedie power parameter (lambda). 1 < p < 2 is typical for biomass.
 tweedie_power <- 1.6
 # Set the dispersion parameter for the Tweedie distribution.
