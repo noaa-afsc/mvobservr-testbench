@@ -90,7 +90,9 @@ res_oe %>%
            KS_test_sig = ifelse(KSp < 0.05, 1, 0),
            median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
            mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
-           perma_sig = ifelse(perma_p < 0.05, 1, 0)
+           gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0),
+           glmm_sig = ifelse(p_glmm < 0.05, 1, 0)
     ) %>%
   select(effsize, bp_level, ends_with("sig")) %>%
   mutate(bin = as.factor(as.numeric(bp_level))) %>%
@@ -104,9 +106,11 @@ res_oe %>%
     }) %>%
   list_rbind() %>%
   pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
-  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "glm_mgcv_sig","KS_test_sig","median_test_sig","mvglm_sig", "perma_sig"),
+  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "glm_mgcv_sig","KS_test_sig",
+                                        "median_test_sig","mvglm_sig", "perma_sig", "glmm_sig", "gllvm_sig"),
                        ordered = TRUE,
-                       labels = c("t-test", "F test", "uni. GLM", "K-S test", "med. diff.", "MV GLM", "permanova"))) %>%
+                       labels = c("t-test", "F test", "uni. GLM", "K-S test", 
+                                  "med. diff.", "mvobservr", "permanova", "glmm", "gllvm"))) %>%
   group_by(bin, effsize, test) %>%
   summarize(meansig = mean(pctsig), lo = quantile(pctsig,0.025), hi = quantile(pctsig, 0.975), .groups="drop") %>%
   filter(test %in% c('MV GLM','permanova','uni. GLM')) %>%
@@ -138,13 +142,14 @@ power_fig_dat <-
   res_oe %>%
   mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
            f_test_sig = ifelse(Fp < 0.05, 1, 0),
-           permu_sig = ifelse(p_val < 0.05, 1, 0),
            glm_mgcv_sig = ifelse(glm_mgcv_p <= 0.05, 1, 0), 
            KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+           permu_sig = ifelse(p_val < 0.05, 1, 0), #permutation
            median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
            mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
-           perma_sig = ifelse(perma_p < 0.05, 1, 0),
-           glmm_sig  = ifelse(p_glmm < 0.05, 1, 0)
+           gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
+           perma_sig = ifelse(perma_p < 0.05, 1, 0), #permanova
+           glmm_sig = ifelse(p_glmm < 0.05, 1, 0)
     ) %>%
   group_by(effsize, bp_level) %>%
   summarize(
@@ -164,10 +169,10 @@ power_fig_dat <-
   mutate(Test = factor(Test, 
                        levels = c("t_test_sig", "f_test_sig",
                                   "KS_test_sig","median_test_sig","permu_sig",
-                                  "glm_mgcv_sig", "mvglm_sig", "perma_sig", "glmm_sig"),
+                                  "glm_mgcv_sig", "mvglm_sig", "perma_sig", "glmm_sig", "gllvm_sig"),
                        labels = c("t-test", "F test", 
                                   "K-S test", "Median","Permutation", 
-                                  "GLM", "pMvGLM", "PERMANOVA", "MvGLM"))) %>%
+                                  "GLM", "mvobservr", "PERMANOVA", "glmm", "gllvm"))) %>%
   mutate(effsize = paste0(effsize, " Observer Effect (%)"))
 
 # Make the Figure
@@ -182,7 +187,8 @@ highlight_colors <- c(
   "#C7A477",
   "#E41A1C", # MvGLM (Red)
   "#377EB8",  # PERMANOVA (Blue)
-  "cyan3" #glmmTMB MvGLM
+  "cyan3", #glmmTMB MvGLM
+  "violet" #gllvm
 )
 
 # 2. The Final Clean Plot
@@ -198,7 +204,7 @@ power_plot <- ggplot(power_fig_dat,
               show.legend = FALSE) + 
   
   # --- LINE LAYER ---
-  geom_line(aes(linewidth = Test %in% c("pMvGLM", "PERMANOVA", "MvGLM"))) +
+  geom_line(aes(linewidth = Test %in% c("mvobservr", "PERMANOVA", "glmm", "gllvm"))) +
   
   # --- POINT LAYER ---
   # Uniform size as requested
