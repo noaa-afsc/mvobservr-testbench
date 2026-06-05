@@ -10,6 +10,8 @@ library(tweedie)
 library(lme4)
 library(glmmTMB)
 source("functions/MvGLMglmm.R")
+library(gllvm)
+source("functions/MvGLMgllvm.R")
 library(vegan)
 library(gdrive)
 library(mvobservr) # devtools::install_github("noaa-afsc/mvobservr")
@@ -176,11 +178,17 @@ res_p <- list_rbind(res_p, names_to = "set")
 ##mvglm
 ```{r}
 #with glmmTMB
-res_glmm <- map(trip_sets_adj, ~ MvGLMglmm(.x), .progress = TRUE
-) %>% list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
+res_glmm <- map(trip_sets_adj, ~ MvGLMglmm(.x), .progress = TRUE) %>% 
+  list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
 
 ```
 
+```{r}
+#with gllvm
+res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE) %>% 
+  list_rbind(res_gllvm, names_to = "set")
+
+```
 
 ```{r}
 #with mvobservr
@@ -208,6 +216,7 @@ res_comb <- map(trip_sets_adj, ~ .x[1, c("param_mod", "param_value")]) %>%
   list_rbind(names_to = "set") %>%
   left_join(res_p, by="set") %>%
   left_join(res_glmm, by=c("set","metric")) %>%
+  left_join(res_gllvm, by=c("set","metric")) %>%
   left_join(res_m, by=c("set","metric"))
 res_comb
 
@@ -244,8 +253,8 @@ perf_plot_dat <-
             num = n(),
             se = sqrt((psig * (1 - psig)) / num), .groups="drop") %>%
   inner_join(params_to_test, by=c("param_mod" = "param")) %>%
-  mutate(Test = factor(Test, levels = c("perma_p", "mvglm_p", "p_glmm"),
-                       labels = c("PERMANOVA", "MvGLM perm", "MvGLM")),
+  mutate(Test = factor(Test, levels = c("perma_p", "mvglm_p", "p_glmm", "p_gllvm"),
+                       labels = c("PERMANOVA", "mvobsrvr", "glmm", "gllvm")),
          #fix panel titles
                        param_display_name = str_to_title(param_display_name) %>%
                                             str_replace_all(" Of ", " of ")
