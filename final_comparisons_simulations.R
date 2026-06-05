@@ -12,6 +12,7 @@ library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
 library(mgcv) #univariate glm
 library(glmmTMB) #MvGLM   
 library(lme4)
+library(gllvm)
 library(tweedie)
 
 source("functions/triplet_stats.R")
@@ -20,6 +21,7 @@ source("functions/getDescriptiveStats.R")
 source("functions/runTandFtests.R")
 source("functions/runGLMM.R")
 source("functions/MvGLMglmm.R")
+source("functions/MvGLMgllvm.R")
 source("functions/assign_sig.R")
 source("functions/ObserverEffectStats.R")
 source("functions/perm_fxn.R")
@@ -51,7 +53,7 @@ trip_coverage <- 0.25
 # For tests using permutations or bootstraps, set the number of iterations
 nperm <- 1000 
 # Set how many populations per scenario to generate
-n_samples_per_level <- 100
+n_samples_per_level <- 10
 # Set the Tweedie power parameter (lambda). 1 < p < 2 is typical for biomass.
 tweedie_power <- 1.6
 # Set the dispersion parameter for the Tweedie distribution.
@@ -213,16 +215,6 @@ res_tt %>%
   group_by(bp_level) %>% 
   summarize(mean(KSp < 0.05), mean(ci_lo > 0 | ci_hi < 0))
 
-# MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
-
-res_MvGLMglmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
-res_MvGLMglmm  <- list_rbind(res_MvGLMglmm, names_to = "set")
-
-res_MvGLMglmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(p_glmm < 0.05))
-
-#boxplot(res_MvGLMglmm$pwr_glmm)
 ## Permanova -----------------------------------------------------------------------------------------------------------
 
 adon_formula = "Y~factor(obs)"
@@ -238,10 +230,29 @@ res_p %>%
   group_by(bp_level) %>% 
   summarize(mean(perma_p<0.05))
 
+# MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
+
+res_MvGLMglmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
+res_MvGLMglmm  <- list_rbind(res_MvGLMglmm, names_to = "set")
+
+res_MvGLMglmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(p_glmm < 0.05))
+
+# MvGLM with GLLVM ----------------------------------------------------------------------------------------------------------------
+
+res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE)
+res_gllvm  <- list_rbind(res_gllvm, names_to = "set")
+
+res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(p_gllvm < 0.05))
+
 ## *Save all but MvGLMperm --------------------------------------------------------------------------------------------------
 
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_MvGLMglmm, file = allbutmv_name)
+save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, 
+     res_tt, res_MvGLMglmm, res_gllvm, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
@@ -291,6 +302,7 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_p, by = "set") %>%
   left_join(res_m, by = "set") %>%
   left_join(res_MvGLMglmm , by = "set") %>%
+  left_join(res_MvGLMgllvm , by = "set") %>%
   left_join(res_permute, by = "set")
 res_comb
 
