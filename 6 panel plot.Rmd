@@ -286,10 +286,18 @@ perf_plot <- ggplot(perf_plot_dat,
                 width = 0.2,                     # Width is now relative to the discrete gap
                 position = pd) + 
   geom_point(size = 3, color = "black", position = pd) + 
-  scale_color_manual(values = c("black", "black", "cyan2", "cornflowerblue")) +
+  scale_color_manual(values = c("#377EB8",  # PERMANOVA (Blue)
+                               "#E41A1C", # MvGLM (Red)
+                               "cyan3", #glmmTMB MvGLM
+                               "violet" #gllvm)
+                               )) +
   scale_shape_manual(values = c(21, 21, 21, 21)) +
-  scale_fill_manual(values = c("white", "black", "cyan2", "cornflowerblue")) +
-  scale_linetype_manual(values = c("dashed", "solid", "solid", "solid")) +
+  scale_fill_manual(values = c("#377EB8",  # PERMANOVA (Blue)
+                               "#E41A1C", # MvGLM (Red)
+                               "cyan3", #glmmTMB MvGLM
+                               "violet" #gllvm)
+                               )) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid")) +
   facet_wrap(~param_display_name, scales = "free_x", ncol = 2) +
   theme_bw() +
   theme(legend.position = "bottom") +
