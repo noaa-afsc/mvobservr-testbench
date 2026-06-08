@@ -169,10 +169,10 @@ power_fig_dat <-
   mutate(Test = factor(Test, 
                        levels = c("t_test_sig", "f_test_sig",
                                   "KS_test_sig","median_test_sig","permu_sig",
-                                  "glm_mgcv_sig", "mvglm_sig", "perma_sig", "glmm_sig", "gllvm_sig"),
+                                  "glm_mgcv_sig", "perma_sig", "mvglm_sig", "glmm_sig", "gllvm_sig"),
                        labels = c("t-test", "F test", 
                                   "K-S test", "Median","Permutation", 
-                                  "GLM", "mvobservr", "PERMANOVA", "glmm", "gllvm"))) %>%
+                                  "GLM", "PERMANOVA","mvobservr", "glmm", "gllvm"))) %>%
   mutate(effsize = paste0(effsize, " Observer Effect (%)"))
 
 # Make the Figure
@@ -185,8 +185,8 @@ highlight_colors <- c(
   "#A9B6C7",
   "black", #"#BAA9C7",
   "#C7A477",
-  "#E41A1C", # MvGLM (Red)
   "#377EB8",  # PERMANOVA (Blue)
+  "#E41A1C", # MvGLM (Red)
   "cyan3", #glmmTMB MvGLM
   "violet" #gllvm
 )
