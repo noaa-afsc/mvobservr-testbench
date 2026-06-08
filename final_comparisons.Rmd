@@ -215,7 +215,7 @@ power_plot <- ggplot(power_fig_dat,
   scale_fill_manual(values = highlight_colors) +
   
   # Ribbon transparency: Background is faint, Focus is visible
-  scale_alpha_manual(values = c(rep(0.2, 6), 0.4, 0.4, 0.4), guide = "none") +
+  scale_alpha_manual(values = c(rep(0.2, 6), 0.4, 0.4, 0.4, 0.4), guide = "none") +
   
   # Line thickness for visual pop
   scale_linewidth_manual(values = c(0.6, 1), guide = "none") + 
