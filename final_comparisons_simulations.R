@@ -241,8 +241,8 @@ res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>%
 
 # MvGLM with GLLVM ----------------------------------------------------------------------------------------------------------------
 
-res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE)
-res_gllvm  <- list_rbind(res_gllvm, names_to = "set")
+res_gllvm <- map(trip_sets_adj, ~ MvGLMgllvm(.x), .progress = TRUE) %>% 
+  list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
 
 res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
