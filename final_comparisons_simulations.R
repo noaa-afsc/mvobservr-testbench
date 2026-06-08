@@ -252,7 +252,7 @@ res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>%
 
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, 
-     res_tt, res_MvGLMglmm, res_gllvm, file = allbutmv_name)
+     res_tt, res_glmm, res_gllvm, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
