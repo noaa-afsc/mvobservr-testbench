@@ -185,8 +185,8 @@ res_glmm <- map(trip_sets_adj, ~ MvGLMglmm(.x), .progress = TRUE) %>%
 
 ```{r}
 #with gllvm
-res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE) %>% 
-  list_rbind(res_gllvm, names_to = "set")
+res_gllvm <- map(trip_sets_adj, ~ MvGLMgllvm(.x), .progress = TRUE) %>% 
+  list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
 
 ```
 
