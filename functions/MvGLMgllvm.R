@@ -33,7 +33,7 @@ MvGLMgllvm <- function(dat) {
     m_full <- m_full_out$result
     
     # 4. Tripwire: Force failure if the optimizer didn't converge cleanly
-    if (m_full$convergence != TRUE) stop("Failed to converge cleanly.") 
+    if (m_full$convergence != TRUE) stop() 
     
     # 5. Run the anova test silently to protect the progress bar
     anova_out <- quiet_anova(m_null, m_full)
