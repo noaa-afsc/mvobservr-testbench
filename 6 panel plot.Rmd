@@ -247,11 +247,14 @@ rm(res_comb)
 ```{r, fig.height=6}
 perf_plot_dat <- 
   res_comb_tbl %>%
-  pivot_longer(cols=c(perma_p, mvglm_p, p_glmm), names_to = "Test", values_to = "p") %>%
+  pivot_longer(cols=c(perma_p, mvglm_p, p_glmm, p_gllvm), names_to = "Test", values_to = "p") %>%
   group_by(param_mod, param_value, Test) %>%
-  summarize(psig = mean(p<0.05), 
-            num = n(),
-            se = sqrt((psig * (1 - psig)) / num), .groups="drop") %>%
+  summarize(
+    psig = mean(p < 0.05, na.rm = TRUE), 
+    num  = sum(!is.na(p)), # Counts only non-NA p-values for accurate SE calculation
+    se   = sqrt((psig * (1 - psig)) / num), 
+    .groups = "drop"
+  ) %>%
   inner_join(params_to_test, by=c("param_mod" = "param")) %>%
   mutate(Test = factor(Test, levels = c("perma_p", "mvglm_p", "p_glmm", "p_gllvm"),
                        labels = c("PERMANOVA", "mvobsrvr", "glmm", "gllvm")),
@@ -275,16 +278,18 @@ perf_plot <- ggplot(perf_plot_dat,
                         y = psig, 
                         shape = Test,
                         linetype = Test,
-                        fill = Test, 
-                        group = Test)) +         # Group keeps the lines connected
+                        fill = Test,
+                        group = Test,
+                        color = Test)) +         # Group keeps the lines connected
   geom_line(position = pd) +
   geom_errorbar(aes(ymin = psig - (1.96 * se), ymax = psig + (1.96 * se)), 
                 width = 0.2,                     # Width is now relative to the discrete gap
                 position = pd) + 
   geom_point(size = 3, color = "black", position = pd) + 
-  scale_shape_manual(values = c(21, 21)) +
-  scale_fill_manual(values = c("white", "black")) +
-  scale_linetype_manual(values = c("dashed", "solid")) +
+  scale_color_manual(values = c("black", "black", "cyan2", "cornflowerblue")) +
+  scale_shape_manual(values = c(21, 21, 21, 21)) +
+  scale_fill_manual(values = c("white", "black", "cyan2", "cornflowerblue")) +
+  scale_linetype_manual(values = c("dashed", "solid", "solid", "solid")) +
   facet_wrap(~param_display_name, scales = "free_x", ncol = 2) +
   theme_bw() +
   theme(legend.position = "bottom") +
