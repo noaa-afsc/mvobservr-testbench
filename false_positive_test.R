@@ -22,7 +22,7 @@ source("functions/perm_fxn.R")
 #' `===================================================================================================================`
 
 #' *Set whether to automatically upload to the Gdrive. Manually change to 'TRUE' when performing full runs!*
-set_skip_prompt <- T
+set_skip_prompt <- F
 
 #' Set the destination folder for data outputs on the Google shared drive
 output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
@@ -222,7 +222,7 @@ res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>%
 
 res_gllvm_lv1 <- map(trip_sets_adj, ~MvGLMgllvm(.x, n_lv = 1), .progress = TRUE)
 res_gllvm_lv1  <- list_rbind(res_gllvm_lv1, names_to = "set") %>% 
-  rename(p_gllvm_lv1 = p_gllvm,
+  rename(p_gllvm1 = p_gllvm,
          runtime_secs_gllvm1 = runtime_secs_gllvm)
 
 ## Permanova -----------------------------------------------------------------------------------------------------------
@@ -293,9 +293,10 @@ gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
 #'`====================================================================================================================`
 
 # Save Batch Results ===================================================================================================
-
+if(set_skip_prompt != F){
 load(gdrive_download(mvglm_name, output_dribble))
 load(gdrive_download(allbutmv_name, output_dribble))
+}
 
 res_comb <- map(trip_sets_adj, ~{
   .x %>%
@@ -343,8 +344,10 @@ res_fp <- res_comb %>%
     median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
     mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
     gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
+    gllvm1_sig = ifelse(p_gllvm1< 0.05, 1, 0),
     perma_sig = ifelse(perma_p < 0.05, 1, 0), #permanova
-    glmm_sig = ifelse(p_glmm < 0.05, 1, 0)
+    glmm_sig = ifelse(p_glmm < 0.05, 1, 0),
+    glmm1_sig = ifelse(p_glmm1 < 0.05, 1, 0)
   ) %>%
   select(ends_with("sig")) %>%
   pivot_longer(
@@ -355,10 +358,10 @@ res_fp <- res_comb %>%
   mutate(test = factor(
     test, 
     levels  = c("t_test_sig", "glm_mgcv_sig", "f_test_sig", "permu_sig", "mvglm_sig",  
-                "KS_test_sig", "perma_sig", "median_test_sig", "glmm_sig", "gllvm_sig"),
+                "KS_test_sig", "perma_sig", "median_test_sig", "glmm_sig", "glmm1_sig", "gllvm_sig", "gllvm1_sig"),
     ordered = TRUE,
     labels  = c("t-test", "GLM", "F test", "Permutation","mvobservr",  
-                "K-S test", "PERMANOVA", "Median", "glmm", "gllvm")
+                "K-S test", "PERMANOVA", "Median", "glmm", "glmm1", "gllvm", "gllvm1")
   ))
 
 set.seed(123) # Ensure reproducibility for the bootstrap
@@ -384,7 +387,7 @@ fpr_plot <- map(1:n_bootstraps, ~{
   ) +
   scale_y_continuous(labels = scales::label_percent()) +
   # Reference lines for standard alpha levels
-  geom_hline(yintercept = c(0.05), linetype = 'dashed', size = 1) +
+  geom_hline(yintercept = c(0.05), linetype = 'dashed', linewidth = 1) +
   theme(
     legend.position = "none",
     
@@ -400,10 +403,25 @@ ggsave("figures/false_positive_plot.png", plot = fpr_plot,
 hold <- select(res_comb, starts_with("runtime"))
 hold <- hold %>% rename_with(~str_remove(., "runtime_secs_"))
 hold <- hold %>% rename("mvobservr" = "mvglm_p") 
-runtimes <- hold %>% pivot_longer(everything(), names_to = "Model", values_to = "runtime") %>%
-  group_by(Model) %>% summarize(Mean_runtime = mean(runtime), SD = sd(runtime), N = n()) %>%
-  mutate(SE = SD / sqrt(N),
-         Mean = sprintf("%.2f", Mean_runtime), 
-         ci_lower = sprintf("%.2f", Mean_runtime - (1.96 * SE)),
-         ci_upper = sprintf("%.2f", Mean_runtime + (1.96 * SE))) %>%
-  select(Model, Mean, ci_upper, ci_lower) %>% arrange((Mean))
+
+runtimes <- hold %>% 
+  pivot_longer(everything(), names_to = "Model", values_to = "runtime") %>% 
+  group_by(Model) %>% 
+  summarize(
+    Mean_runtime = mean(runtime, na.rm = TRUE), 
+    SD           = sd(runtime, na.rm = TRUE), 
+    N            = sum(!is.na(runtime))
+  ) %>% 
+  mutate(
+    SE       = SD / sqrt(N),
+    # Do math while variables are still numbers
+    ci_lower_num = Mean_runtime - (1.96 * SE),
+    ci_upper_num = Mean_runtime + (1.96 * SE),
+    # Format numbers into strings for display
+    Mean     = sprintf("%.2f", Mean_runtime),
+    ci_lower = sprintf("%.2f", ci_lower_num),
+    ci_upper = sprintf("%.2f", ci_upper_num)
+  ) %>% 
+  select(Model, N, Mean, ci_lower, ci_upper) %>% 
+  arrange(Mean)
+
