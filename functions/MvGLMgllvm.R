@@ -1,4 +1,4 @@
-MvGLMgllvm <- function(dat) {
+MvGLMgllvm <- function(dat, n_lv = 0) {
   start_time <- Sys.time()
   
   tryCatch({
@@ -14,7 +14,7 @@ MvGLMgllvm <- function(dat) {
     m_null_out <- quiet_gllvm(
       y = Y, 
       family = "tweedie", 
-      num.lv = 0, 
+      num.lv = n_lv, 
       Power = NULL,
       control = list(trace = 0) #another silencing tool via gemini.
     )
@@ -26,7 +26,7 @@ MvGLMgllvm <- function(dat) {
       X = X, 
       formula = ~ obs,
       family = "tweedie", 
-      num.lv = 0, 
+      num.lv = n_lv, 
       Power = NULL,
       control = list(trace = 0)
     )

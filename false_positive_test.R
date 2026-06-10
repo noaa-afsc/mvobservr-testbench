@@ -201,18 +201,13 @@ res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>%
 
 #only one latent variable bc we have two species and lv < df.
 res_glmm_lv1 <- trip_sets_adj %>% map(MvGLMglmm, lv = 1, .progress = TRUE)
-res_glmm_lv1  <- list_rbind(res_glmm_lv2, names_to = "set") %>% 
-  rename(p_glmm_lv1 = p_glmm,
-         runtime_secs_lv1 = runtime_secs_glmm)
+res_glmm_lv1  <- list_rbind(res_glmm_lv1, names_to = "set") %>% 
+  rename(p_glmm1 = p_glmm,
+         runtime_secs_glmm1 = runtime_secs_glmm)
 
 res_glmm_lv1 %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
-  summarize(mean(p_glmm_lv1 < 0.05))
-
-# MvGLM with glmmTMB bootstrap --------------------------------------------
-
-res_glmm_boot <- 
-
+  summarize(mean(p_glmm1 < 0.05))
 
 # MvGLM with GLLVM ----------------------------------------------------------------------------------------------------------------
 
@@ -223,10 +218,12 @@ res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>%
   group_by(bp_level) %>% 
   summarize(mean(p_gllvm < 0.05))
 
-
 # MvGLM with GLLVM and 1 latent variables ---------------------------------
 
-res_gllvm_1lv <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE) #num.lv = 2
+res_gllvm_lv1 <- map(trip_sets_adj, ~MvGLMgllvm(.x, n_lv = 1), .progress = TRUE)
+res_gllvm_lv1  <- list_rbind(res_gllvm_lv1, names_to = "set") %>% 
+  rename(p_gllvm_lv1 = p_gllvm,
+         runtime_secs_gllvm1 = runtime_secs_gllvm)
 
 ## Permanova -----------------------------------------------------------------------------------------------------------
 
@@ -246,7 +243,9 @@ res_p %>%
 ## *Save all but mvglm --------------------------------------------------------------------------------------------------
 
 allbutmv_name <- paste0("output_data/allbutmv_falsepos.Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_glmm, res_gllvm, res_glmm_lv1, file = allbutmv_name)
+save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_glmm, res_gllvm, 
+     res_glmm_lv1, res_gllvm_lv1, file = allbutmv_name)
+
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
@@ -316,6 +315,7 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_glmm, by = "set") %>%
   left_join(res_gllvm, by = "set") %>%
   left_join(res_glmm_lv1, by = "set") %>%
+  left_join(res_gllvm_lv1, by = "set") %>%
   left_join(res_permute, by = "set")
 res_comb
 
