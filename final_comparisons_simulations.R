@@ -232,8 +232,8 @@ res_p %>%
 
 # MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
 
-res_glmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
-res_glmm  <- list_rbind(res_glmm, names_to = "set")
+res_glmm <- trip_sets_adj %>% map(MvGLMglmm, lv = 0, .progress = TRUE) %>% 
+  list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
 
 res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
@@ -241,7 +241,7 @@ res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>%
 
 # MvGLM with GLLVM ----------------------------------------------------------------------------------------------------------------
 
-res_gllvm <- map(trip_sets_adj, ~ MvGLMgllvm(.x), .progress = TRUE) %>% 
+res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE) %>% 
   list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
 
 res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
