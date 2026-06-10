@@ -190,12 +190,29 @@ res_tt %>%
 
 # MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
 
-res_glmm <- map(trip_sets_adj, ~suppressMessages(MvGLMglmm(.x)), .progress = TRUE)
+res_glmm <- trip_sets_adj %>% map(MvGLMglmm, lv = 0, .progress = TRUE)
 res_glmm  <- list_rbind(res_glmm, names_to = "set")
 
 res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
   summarize(mean(p_glmm < 0.05))
+
+# MvGLM with glmTMB and lv ------------------------------------------------
+
+#only one latent variable bc we have two species and lv < df.
+res_glmm_lv1 <- trip_sets_adj %>% map(MvGLMglmm, lv = 1, .progress = TRUE)
+res_glmm_lv1  <- list_rbind(res_glmm_lv2, names_to = "set") %>% 
+  rename(p_glmm_lv1 = p_glmm,
+         runtime_secs_lv1 = runtime_secs_glmm)
+
+res_glmm_lv1 %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(p_glmm_lv1 < 0.05))
+
+# MvGLM with glmmTMB bootstrap --------------------------------------------
+
+res_glmm_boot <- 
+
 
 # MvGLM with GLLVM ----------------------------------------------------------------------------------------------------------------
 
@@ -205,6 +222,11 @@ res_gllvm  <- list_rbind(res_gllvm, names_to = "set")
 res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
   group_by(bp_level) %>% 
   summarize(mean(p_gllvm < 0.05))
+
+
+# MvGLM with GLLVM and 1 latent variables ---------------------------------
+
+res_gllvm_1lv <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE) #num.lv = 2
 
 ## Permanova -----------------------------------------------------------------------------------------------------------
 
@@ -224,7 +246,7 @@ res_p %>%
 ## *Save all but mvglm --------------------------------------------------------------------------------------------------
 
 allbutmv_name <- paste0("output_data/allbutmv_falsepos.Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_glmm, res_gllvm, file = allbutmv_name)
+save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_glmm, res_gllvm, res_glmm_lv1, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
@@ -293,6 +315,7 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_m, by = "set") %>%
   left_join(res_glmm, by = "set") %>%
   left_join(res_gllvm, by = "set") %>%
+  left_join(res_glmm_lv1, by = "set") %>%
   left_join(res_permute, by = "set")
 res_comb
 
@@ -371,3 +394,16 @@ fpr_plot
 
 ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
        width = 5, height = 4, units = "in", dpi = 300) 
+
+##Table: runtimes for false positives ----
+
+hold <- select(res_comb, starts_with("runtime"))
+hold <- hold %>% rename_with(~str_remove(., "runtime_secs_"))
+hold <- hold %>% rename("mvobservr" = "mvglm_p") 
+runtimes <- hold %>% pivot_longer(everything(), names_to = "Model", values_to = "runtime") %>%
+  group_by(Model) %>% summarize(Mean_runtime = mean(runtime), SD = sd(runtime), N = n()) %>%
+  mutate(SE = SD / sqrt(N),
+         Mean = sprintf("%.2f", Mean_runtime), 
+         ci_lower = sprintf("%.2f", Mean_runtime - (1.96 * SE)),
+         ci_upper = sprintf("%.2f", Mean_runtime + (1.96 * SE))) %>%
+  select(Model, Mean, ci_upper, ci_lower) %>% arrange((Mean))

@@ -1,4 +1,4 @@
-MvGLMglmm <- function(dat) {
+MvGLMglmm <- function(dat, lv) {
   start_time <- Sys.time()
   
   tryCatch({
@@ -11,7 +11,15 @@ MvGLMglmm <- function(dat) {
     # https://www.jstatsoft.org/article/view/v112i01 for source doc and example on how to use with boot and nested models
     # https://journal.r-project.org/articles/RJ-2017-066/index.html is source for original package article and has run times.
     m_null <- glmmTMB(biomass ~ 0 + species, data = long, family = tweedie(link = "log")) #default is to set these up serially.
+    
+    if(lv == 0){
     m_full <- glmmTMB(biomass ~ 0 + species + species:obs, data = long, family = tweedie(link = "log"))
+    } else if (lv == 1) {
+    #m_full <- glmmTMB(biomass ~ 0 + species + rr(species:obs, d = lv), data = long, family = tweedie(link = "log"))
+    m_full <- glmmTMB(biomass ~ 0 + species + obs + rr(species | uid, d = 1), 
+                      data = long, 
+                      family = tweedie(link = "log"))
+    }
     
     # 3. Tripwire: Force failure if the optimizer didn't converge cleanly
     if (m_full$fit$convergence != 0) stop() 
