@@ -42,12 +42,13 @@ MvGLMgllvm <- function(dat, n_lv = 0) {
     # 6. Calculate runtime and return metrics
     data.frame(
       p_gllvm            = as.numeric(anova_res$`P.value`[2]),
+      pwr_gllvm          = as.numeric(m_full$Power),
       runtime_secs_gllvm = as.numeric(difftime(Sys.time(), start_time, units = "secs"))
     )
     
   }, error = function(e) {
     # If any error or convergence failure occurs, return entirely blank rows
-    data.frame(p_gllvm = NA_real_, runtime_secs_gllvm = NA_real_)
+    data.frame(p_gllvm = NA_real_, pwr_gllvm = NA_real_, runtime_secs_gllvm = NA_real_)
   })
 }
 
