@@ -7,6 +7,7 @@ library(glmmTMB)
 library(gllvm)
 library(lme4)
 library(tweedie)
+library(kableExtra)
 
 source("functions/triplet_stats.R")
 source("functions/TripletAnalysis.R")
@@ -203,6 +204,7 @@ res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>%
 res_glmm_lv1 <- trip_sets_adj %>% map(MvGLMglmm, lv = 1, .progress = TRUE)
 res_glmm_lv1  <- list_rbind(res_glmm_lv1, names_to = "set") %>% 
   rename(p_glmm1 = p_glmm,
+         pwr_glmm1 = pwr_glmm,
          runtime_secs_glmm1 = runtime_secs_glmm)
 
 res_glmm_lv1 %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
@@ -223,7 +225,8 @@ res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>%
 res_gllvm_lv1 <- map(trip_sets_adj, ~MvGLMgllvm(.x, n_lv = 1), .progress = TRUE)
 res_gllvm_lv1  <- list_rbind(res_gllvm_lv1, names_to = "set") %>% 
   rename(p_gllvm1 = p_gllvm,
-         runtime_secs_gllvm1 = runtime_secs_gllvm)
+         runtime_secs_gllvm1 = runtime_secs_gllvm,
+         pwr_gllvm1 = pwr_gllvm)
 
 ## Permanova -----------------------------------------------------------------------------------------------------------
 
@@ -255,34 +258,33 @@ gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 res_m <- imap(trip_sets_adj, ~{
   start_time <- Sys.time()
   
+  # 1. Prepare data
   processed_df <- .x %>%
     mutate(observed = ifelse(obs == 1, 'Y', 'N')) %>%
     pivot_longer(cols = starts_with("sp_"),
-                 names_to = 'species', values_to = 'biomass') %>%
-    # --- MUZZLE MVGLM_OBS HERE ---
-    {
-      capture.output(suppressMessages(
-        out <- mvglm_obs(., block = NULL, add_var = NULL, n_permutations = nperm, nCores = TRUE)
-      ))
-      out
-    } %>%
-    # -----------------------------
-  pluck("results") %>%
-    {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
-    pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p")
+                 names_to = 'species', values_to = 'biomass')
+  
+  # 2. Run model and capture output
+  capture.output(suppressMessages(
+    out <- mvglm_obs(processed_df, block = NULL, add_var = NULL, n_permutations = nperm, nCores = TRUE)
+  ))
   
   elapsed_time <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
   
-  processed_df %>%
-    mutate(runtime_secs_mvglm_p = elapsed_time)
+  # 3. Build a clean, wide 1-row data frame directly from 'out'
+  data.frame(
+    p_mvobs    = out$results$p,
+    pwr_mvobs   = out$tweedie_profile$xi.max,
+    runtime_secs_mvobs = elapsed_time
+  )
 }, .progress = "Processing sets")
 
-# Combine everything and filter
-res_m <- list_rbind(res_m, names_to = "set") %>%
-  filter(metric == "biomass_total")
+# Combine all list elements into a single data frame
+res_m <- list_rbind(res_m, names_to = "set")
 
+# Now you can easily check your significance rate
 res_m %>% 
-  summarize(mean(mvglm_p<0.05))
+  summarize(mean(p_mvobs < 0.05))
 
 ## *Save and upload mvglm results --------------------------------------------------------------------------------------
 
@@ -291,7 +293,7 @@ save(res_m, file = mvglm_name)
 gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
 
 #'`====================================================================================================================`
-
+gc()
 # Save Batch Results ===================================================================================================
 if(set_skip_prompt != F){
 load(gdrive_download(mvglm_name, output_dribble))
@@ -342,7 +344,7 @@ res_fp <- res_comb %>%
     KS_test_sig = ifelse(KSp < 0.05, 1, 0),
     permu_sig = ifelse(p_val < 0.05, 1, 0), #permutation
     median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
-    mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
+    mvglm_sig = ifelse(p_mvobs < 0.05, 1, 0),
     gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
     gllvm1_sig = ifelse(p_gllvm1< 0.05, 1, 0),
     perma_sig = ifelse(perma_p < 0.05, 1, 0), #permanova
@@ -398,30 +400,61 @@ fpr_plot
 ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
        width = 5, height = 4, units = "in", dpi = 300) 
 
-##Table: runtimes for false positives ----
+## Make two summary tables of runtimes and power from Tweedie
+create_summary_table <- function(data, select_prefix, remove_pattern) {
+  data %>%
+    select(starts_with(select_prefix)) %>%
+    rename_with(~str_remove(., remove_pattern)) %>%
+    rename("mvobservr" = any_of("mvobs")) %>% 
+    pivot_longer(everything(), names_to = "Model", values_to = "value") %>%
+    group_by(Model) %>%
+    summarize(
+      Mean_num = mean(value, na.rm = TRUE),
+      SD       = sd(value, na.rm = TRUE),
+      N        = sum(!is.na(value)),
+      .groups  = "drop"
+    ) %>%
+    mutate(
+      SE       = SD / sqrt(N),
+      Mean     = sprintf("%.2f", Mean_num),
+      ci_lower = sprintf("%.2f", Mean_num - (1.96 * SE)),
+      ci_upper = sprintf("%.2f", Mean_num + (1.96 * SE))
+    ) %>%
+    select(Model, N, Mean, ci_lower, ci_upper) %>%
+    arrange(Mean)
+}
 
-hold <- select(res_comb, starts_with("runtime"))
-hold <- hold %>% rename_with(~str_remove(., "runtime_secs_"))
-hold <- hold %>% rename("mvobservr" = "mvglm_p") 
+# Function to turn those data frames into publication-ready kables
+make_publication_kable <- function(df, caption_text, value_label) {
+  df %>%
+    # Combine Mean and CIs into standard journal format: Mean (Lower, Upper)
+    mutate(Estimate = sprintf("%s (%s, %s)", Mean, ci_lower, ci_upper)) %>%
+    select(Model, N, !!sym(value_label) := Estimate) %>%
+    
+    # Generate the kable
+    kbl(caption = caption_text, booktabs = TRUE, align = "lcc") %>%
+    
+    # Apply classic academic styling (APA/academic standard)
+    kable_classic(full_width = FALSE, html_font = "Times New Roman") %>%
+    
+    # Clean up header formatting
+    row_spec(0, bold = TRUE)
+}
 
-runtimes <- hold %>% 
-  pivot_longer(everything(), names_to = "Model", values_to = "runtime") %>% 
-  group_by(Model) %>% 
-  summarize(
-    Mean_runtime = mean(runtime, na.rm = TRUE), 
-    SD           = sd(runtime, na.rm = TRUE), 
-    N            = sum(!is.na(runtime))
-  ) %>% 
-  mutate(
-    SE       = SD / sqrt(N),
-    # Do math while variables are still numbers
-    ci_lower_num = Mean_runtime - (1.96 * SE),
-    ci_upper_num = Mean_runtime + (1.96 * SE),
-    # Format numbers into strings for display
-    Mean     = sprintf("%.2f", Mean_runtime),
-    ci_lower = sprintf("%.2f", ci_lower_num),
-    ci_upper = sprintf("%.2f", ci_upper_num)
-  ) %>% 
-  select(Model, N, Mean, ci_lower, ci_upper) %>% 
-  arrange(Mean)
+# 3. Generate the underlying data
+runtimes_df <- create_summary_table(res_comb, "runtime", "runtime_secs_")
+power_df    <- create_summary_table(res_comb, "pwr", "pwr_")
 
+## Table 1: Runtimes ----
+runtimes_df %>% 
+  make_publication_kable(
+    caption_text = "Table 1: Computational Runtimes for False Positives", 
+    value_label  = "Mean Runtime in Seconds (95% CI)"
+  )
+
+## Table 2: Tweedie Power ----
+power_df %>% 
+  make_publication_kable(
+    caption_text = "Table 2: Tweedie Power Statistics for False Positives", 
+    value_label  = "Mean Tweedie Power (95% CI)"
+  )
