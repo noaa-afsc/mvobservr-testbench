@@ -257,7 +257,7 @@ perf_plot_dat <-
   ) %>%
   inner_join(params_to_test, by=c("param_mod" = "param")) %>%
   mutate(Test = factor(Test, levels = c("perma_p", "mvglm_p", "p_glmm", "p_gllvm"),
-                       labels = c("PERMANOVA", "mvobsrvr", "glmm", "gllvm")),
+                       labels = c("PERMANOVA", "mvobservr", "glmm", "gllvm")),
          #fix panel titles
                        param_display_name = str_to_title(param_display_name) %>%
                                             str_replace_all(" Of ", " of ")
