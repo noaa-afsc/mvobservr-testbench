@@ -55,15 +55,14 @@ mu_scalar <- 100
 
 #'`====================================================================================================================`
 
+set_number <- 1 # Set this
+
 # Generate Trip Populations ============================================================================================
+seed_max <- set_number*3
+seed_seq <- seq(seed_max - 2, seed_max, 1)
+seed_num <- as.numeric(paste(seed_seq, collapse = ""))
+set.seed(seed_num)
 
-set_number <- 1 # 1 or 2
-
-if(set_number == 1) {
-  set.seed(123)
-} else if(set_number == 2) {
-  set.seed(456)
-} else stop("'set_number' needs to be specified as '1' or '2'!")
 
 trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
   # 1. Generate data until we have enough valid rows
