@@ -1,20 +1,52 @@
 # Stitch sets  ===================================================================================================
 # loads data previously run from false_positive_test.r
-
 library(kableExtra)
-library(ggplot2)
-library(dplyr)
+library(tidyverse)
+library(broom)
+library(gdrive)
 
-mvobservr_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
-load(gdrive_download(local_path = "output_data/alltests_falsepos_set1.Rdata", gdrive_dribble = mvobservr_dribble))
-res_comb_tbl <- res_comb
-load(gdrive_download(local_path = "output_data/param_plot_batch2.Rdata", gdrive_dribble = mvobservr_dribble))
-#res_comb is now overwritten
-res_comb <- res_comb |> mutate(set = set + max(res_comb_tbl$set))
-res_comb_tbl <- rbind(res_comb_tbl, res_comb)
-rm(res_comb)
+# 1. Define the Google Drive folder ID
+folder_id <- "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt"
 
-##figure: boxplot for false positives ----
+# 2. Tell Google Drive to list all files in that folder that match your naming pattern
+# The 'pattern' argument acts as a search filter
+drive_files <- drive_ls(path = as_id(folder_id), pattern = "alltests_falsepos_set")
+
+# Extract just the exact file names from the Google Drive query
+file_names <- drive_files$name
+cat("Awesome, found", length(file_names), "files to process!\n")
+
+# 3. Set up your custom wrapper dribble as before
+mvobservr_dribble <- gdrive_set_dribble(folder_id = folder_id)
+
+# Initialize our empty master dataframe
+res_comb_tbl <- tibble()
+
+# 4. Loop over the EXACT file names we just pulled from the cloud
+for(current_name in file_names) {
+  # Reconstruct the path exactly how your gdrive_download function expects it
+  current_file <- paste0("output_data/", current_name)
+  cat("Downloading and processing:", current_file, "\n")
+  tryCatch({
+    load(gdrive_download(local_path = current_file, gdrive_dribble = mvobservr_dribble))
+    if(nrow(res_comb_tbl) == 0) {
+      # For the very first file, assign it and add a tracking column
+      res_comb_tbl <- res_comb |> 
+        mutate(source_file = current_name)
+    } else {
+      # For all subsequent files, offset the set ID, add the tracking column, and bind
+      res_comb <- res_comb |> 
+        mutate(set = set + max(res_comb_tbl$set), source_file = current_name)
+      res_comb_tbl <- bind_rows(res_comb_tbl, res_comb)
+    }
+    # Clean up the single batch
+    rm(res_comb)
+  }, error = function(e) {
+    message("--> Skipped ", current_file, " (Error: ", e$message, ")")
+  })
+}
+
+## figure: boxplot for false positives ----
 res_fp <- res_comb_tbl %>%
   mutate(
     # Standard p-value threshold is < 0.05
@@ -22,12 +54,12 @@ res_fp <- res_comb_tbl %>%
     f_test_sig = ifelse(Fp < 0.05, 1, 0),
     glm_mgcv_sig = ifelse(glm_mgcv_p <= 0.05, 1, 0), 
     KS_test_sig = ifelse(KSp < 0.05, 1, 0),
-    permu_sig = ifelse(p_val < 0.05, 1, 0), #permutation
+    permu_sig = ifelse(p_val < 0.05, 1, 0), # permutation
     median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
     mvglm_sig = ifelse(p_mvobs < 0.05, 1, 0),
     gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
     gllvm1_sig = ifelse(p_gllvm1< 0.05, 1, 0),
-    perma_sig = ifelse(perma_p < 0.05, 1, 0), #permanova
+    perma_sig = ifelse(perma_p < 0.05, 1, 0), # permanova
     glmm_sig = ifelse(p_glmm < 0.05, 1, 0),
     glmm1_sig = ifelse(p_glmm1 < 0.05, 1, 0)
   ) %>%
@@ -37,48 +69,53 @@ res_fp <- res_comb_tbl %>%
     names_to  = "test", 
     values_to = "sig"
   ) %>%
-  mutate(test = factor(
-    test, 
-    levels  = c("t_test_sig", "glm_mgcv_sig", "f_test_sig", "permu_sig", "mvglm_sig",  
-                "KS_test_sig", "perma_sig", "median_test_sig", "glmm_sig", "glmm1_sig", "gllvm_sig", "gllvm1_sig"),
-    ordered = TRUE,
-    labels  = c("t-test", "GLM", "F test", "Permutation","mvobservr",  
-                "K-S test", "PERMANOVA", "Median", "glmm", "glmm1", "gllvm", "gllvm1")
-  ))
+  mutate(
+    # 1. Swap the raw column names for your clean plotting labels
+    test = fct_recode(factor(test),
+                      "t-test"      = "t_test_sig",
+                      "GLM"         = "glm_mgcv_sig",
+                      "F test"      = "f_test_sig",
+                      "Permutation" = "permu_sig",
+                      "mvobservr"   = "mvglm_sig",
+                      "K-S test"    = "KS_test_sig",
+                      "PERMANOVA"   = "perma_sig",
+                      "Median"      = "median_test_sig",
+                      "glmm"        = "glmm_sig",
+                      "glmm1"       = "glmm1_sig",
+                      "gllvm"       = "gllvm_sig",
+                      "gllvm1"      = "gllvm1_sig"
+    ),
+    # 2. Reorder the factor levels based on the mean of the 'sig' column
+    test = fct_reorder(test, sig, .fun = mean, .na_rm = TRUE)
+  )
 
-set.seed(123) # Ensure reproducibility for the bootstrap
-n_bootstraps <- 1000
-
-fpr_plot <- map(1:n_bootstraps, ~{
-  slice_sample(res_fp, n = n_samples_per_level, by = test, replace = TRUE) %>%
-    mutate(boot = .x)
-}) %>%
-  list_rbind() %>%
-  group_by(boot, test) %>%
-  summarize(pctsig = mean(sig, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = test, y = pctsig)) + #fill was = test
-  geom_violin(alpha = 0.5, fill = 'black', quantiles = c(0.25, 0.5, 0.75), 
-              quantile.linetype = 1, quantile.color = "white") +
-  stat_summary(fun = "mean", geom = "point", size = 2, color = "white") +
+ # For extracting tidy test results
+## 2. Generate the Point-Range Plot ----
+fpr_plot <- fpr_stats %>%
+  # Order the tests from highest false positive rate to lowest for clean reading
+  mutate(test = fct_reorder(test, estimate)) %>%
+  ggplot(aes(y = test, x = estimate)) +
+  
+  # Add the error bars (95% CI) and the point estimate using the modern geom_errorbar
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), width = 0.2, linewidth = 0.8) +
+  geom_point(size = 3, color = "black") +
+  geom_vline(xintercept = 0.05, linetype = "dashed", color = "red", linewidth = 1) +
+  
   theme_classic() +
-  labs(
-    x = NULL,
-    y = "Percentage of Positive (Significant) Tests"#,
-    # title = "False Positive Rate of Tests on Total Biomass",
-    # subtitle = paste0(round(trip_coverage * 100, 0), "% coverage")
-  ) +
-  scale_y_continuous(labels = scales::label_percent()) +
-  # Reference lines for standard alpha levels
-  geom_hline(yintercept = c(0.05), linetype = 'dashed', linewidth = 1) +
+  labs(y = NULL, x = "False Positive Rate (95% Confidence Interval)") +
+  
+  # Format x-axis as percentages
+  scale_x_continuous(labels = scales::percent_format()) +
+  
   theme(
-    legend.position = "none",
-    
-    axis.text.x = element_text(angle = 45, hjust = 1)
+    axis.text = element_text(size = 11, color = "black"),
+    axis.title.x = element_text(margin = margin(t = 10))
   )
 fpr_plot
 
 ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
        width = 5, height = 4, units = "in", dpi = 300) 
+
 
 ## Make two summary tables of runtimes and power from Tweedie
 create_summary_table <- function(data, select_prefix, remove_pattern) {
