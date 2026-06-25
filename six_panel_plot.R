@@ -1,10 +1,4 @@
----
-title: "6 panel plot"
-output: html_notebook
----
-
-#setup
-```{r}
+#setup ----
 library(tidyverse)
 library(tweedie)
 library(lme4)
@@ -16,15 +10,14 @@ library(vegan)
 library(gdrive)
 library(mvobservr) # devtools::install_github("noaa-afsc/mvobservr")
 
-set<- 1  # 1 or 2
+set <- 1  # 1 or 2
 output_name <- paste0("output_data/param_plot_set", set, ".Rdata")
-```
 
-```{r simulation_setup}
-# Constants
-
+# Constants ----
 # Set how many populations per scenario to generate
-n_samples_per_level <- 100
+# There are 30 combinations, so 1 n_samples_per_level is 30 populations to test.
+n_samples_per_level <- 1 #3000 populations at 100
+
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
 bias <- c(0, -0.25)
 # Set target Berger-Parker index (dominance) levels.
@@ -32,7 +25,7 @@ bp_level <- 0.6
 # Set number of permutations
 n_permutations <- 1000
 
-# Defaults for varying params
+# Defaults for varying params ----
 # Set the Tweedie power parameter (lambda). 1 < p < 2 is typical for biomass.
 tweedie_power <- 1.6
 # Set the dispersion parameter for the Tweedie distribution.
@@ -47,10 +40,7 @@ trip_coverage <- 0.25
 # Set the mu scalar
 mu_scalar <- 100
 
-```
-
-```{r}
-# Set up varying parameters and their levels
+# Set up varying parameters and their levels ----
 params_to_test <- data.frame(
   param = c("tweedie_power", "phi", "fixed_total_biomass", "ntrips", "trip_coverage", "mu_scalar"),
   param_display_name = c("Tweedie power parameter (poisson-gamma)",
@@ -69,10 +59,8 @@ params_to_test <- data.frame(
   ),
   defaults = c(tweedie_power, phi, fixed_total_biomass, ntrips, trip_coverage, mu_scalar)
 )
-```
 # Need to run to here for figure to work with quick pull down.
 
-```{r}
 param_values_df <- params_to_test %>% 
   select(param, param_values) %>%
   separate_wider_delim(
@@ -83,9 +71,8 @@ param_values_df <- params_to_test %>%
   pivot_longer(cols=starts_with("val"), values_to = "param_val") %>%
   mutate(param_val = as.numeric(param_val)) %>%
   select(-name)
-```
 
-```{r generatedata}
+# Generate data ----
 # for reproducibility
 if(set == 1) {
   set.seed(123)
@@ -127,9 +114,7 @@ trip_sets_adj <- map(rep(1:nrow(param_values_df), n_samples_per_level), ~{
     slice(1:ntrips) %>%
     select(-id) %>% #drop temp id
     mutate(uid = 1:ntrips)
-  
-  
-
+ 
   #standardize catches
   catches <- catches %>%
     mutate(total_biomass = sum(sp_1 + sp_2)) %>%
@@ -148,23 +133,20 @@ trip_sets_adj <- map(rep(1:nrow(param_values_df), n_samples_per_level), ~{
     mutate(param_mod = param_values_df$param[.x],
            param_value = param_values_df$param_val[.x],
            .before=1)
-
+  
   #select observed and add bias
   catches <- catches %>%
     mutate(obs = rbinom(nrow(.), 1, trip_coverage)) %>%
     mutate(sp_1 = ifelse(obs == 1, sp_1 * (1+bias[1]), sp_1),
-         sp_2 = ifelse(obs == 1, sp_2 * (1+bias[2]), sp_2),
-         biomass_total = sp_1 + sp_2
-         )
-
+           sp_2 = ifelse(obs == 1, sp_2 * (1+bias[2]), sp_2),
+           biomass_total = sp_1 + sp_2
+    )
+  
   return(catches)
 }, .progress=TRUE)
 
-
-```
-
+# Begin tests ----
 ##permanova
-```{r}
 adon_formula = "Y~factor(obs)"
 
 res_p <- map(trip_sets_adj, ~{
@@ -173,45 +155,32 @@ res_p <- map(trip_sets_adj, ~{
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
 }, .progress=TRUE) #1 min for 60 sets
 res_p <- list_rbind(res_p, names_to = "set")
-```
 
 ##mvglm
-```{r}
 #with glmmTMB
 res_glmm <- trip_sets_adj %>% map(MvGLMglmm, lv = 0, .progress = TRUE) %>% 
   list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
 
-```
-
-```{r}
 #with gllvm
 res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE) %>% 
   list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
 
-```
-
-```{r}
 #with mvobservr
- # 60 sets x 100 perm  = 30 min on laptop using 12 cores = 0.50m/s = 0.00500m/s/p
- # 60 sets x 200 perm  = 45 min on laptop using 12 cores = 0.75m/s = 0.00375m/s/p
- # 10 sets x 1000 perm = 17 min                          = 1.70m/s = 0.00170m/s/p
 res_m <- imap(1:length(trip_sets_adj), ~{
   print(paste0("***set ", .x, " ", now()))
   trip_sets_adj[[.x]] %>%
-      mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
-      pivot_longer(cols=starts_with("sp_"),
-                   names_to = 'species', values_to = 'biomass') %>%
-      mvglm_obs(block = NULL, add_var = NULL, n_permutations= n_permutations, nCores = TRUE) %>%
-      pluck("results") %>%
-      {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
-      pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
+    mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
+    pivot_longer(cols=starts_with("sp_"),
+                 names_to = 'species', values_to = 'biomass') %>%
+    mvglm_obs(block = NULL, add_var = NULL, n_permutations= n_permutations, nCores = TRUE) %>%
+    pluck("results") %>%
+    {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
+    pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
 })
 res_m <- list_rbind(res_m, names_to = "set") %>%
   filter(metric == "biomass_total")
-```
 
 #combine output
-```{r}
 res_comb <- map(trip_sets_adj, ~ .x[1, c("param_mod", "param_value")]) %>%
   list_rbind(names_to = "set") %>%
   left_join(res_p, by="set") %>%
@@ -220,31 +189,23 @@ res_comb <- map(trip_sets_adj, ~ .x[1, c("param_mod", "param_value")]) %>%
   left_join(res_m, by=c("set","metric"))
 res_comb
 
-
 save(res_comb, file = output_name)
-```
 
-#upload files to gdrive
-  only once when transferring from data ran on cloud workstation
-```{r}
+#upload files to gdrive only once when transferring from data ran on cloud workstation
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
 gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble)
-```
 
+# Quick pulldown and figure generation ----
 #pull down and load data files from gdrive
-```{r}
-#Run to line 72 first.
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
-load(gdrive_download(local_path = "output_data/param_plot_batch1.Rdata", gdrive_dribble = mvobservr_dribble))
+load(gdrive_download(local_path = "output_data/param_plot_set1.Rdata", gdrive_dribble = mvobservr_dribble))
 res_comb_tbl <- res_comb
-load(gdrive_download(local_path = "output_data/param_plot_batch2.Rdata", gdrive_dribble = mvobservr_dribble))
+load(gdrive_download(local_path = "output_data/param_plot_set2.Rdata", gdrive_dribble = mvobservr_dribble))
 res_comb <- res_comb |> mutate(set = set + max(res_comb_tbl$set))
 res_comb_tbl <- rbind(res_comb_tbl, res_comb)
 rm(res_comb)
-```
 
 #make plot
-```{r, fig.height=6}
 perf_plot_dat <- 
   res_comb_tbl %>%
   pivot_longer(cols=c(perma_p, mvglm_p, p_glmm, p_gllvm), names_to = "Test", values_to = "p") %>%
@@ -259,17 +220,17 @@ perf_plot_dat <-
   mutate(Test = factor(Test, levels = c("perma_p", "mvglm_p", "p_glmm", "p_gllvm"),
                        labels = c("PERMANOVA", "mvobservr", "glmm", "gllvm")),
          #fix panel titles
-                       param_display_name = str_to_title(param_display_name) %>%
-                                            str_replace_all(" Of ", " of ")
-                       ) %>%
+         param_display_name = str_to_title(param_display_name) %>%
+           str_replace_all(" Of ", " of ")
+  ) %>%
   mutate(param_value = case_when(
-                         param_mod == "trip_coverage" ~ param_value*ntrips, 
-                         #convert to number of trips
-                         TRUE ~ param_value)) %>%
+    param_mod == "trip_coverage" ~ param_value*ntrips, 
+    #convert to number of trips
+    TRUE ~ param_value)) %>%
   mutate(defaults = case_when(
-                         param_mod == "trip_coverage" ~ defaults*ntrips, 
-                         #convert to number of trips
-                         TRUE ~ defaults))
+    param_mod == "trip_coverage" ~ defaults*ntrips, 
+    #convert to number of trips
+    TRUE ~ defaults))
 
 pd <- position_dodge(width = 0.1) # Now 0.4 means "40% of the gap between points"
 
@@ -287,16 +248,16 @@ perf_plot <- ggplot(perf_plot_dat,
                 position = pd) + 
   geom_point(size = 3, color = "black", position = pd) + 
   scale_color_manual(values = c("#377EB8",  # PERMANOVA (Blue)
-                               "#E41A1C", # MvGLM (Red)
-                               "cyan3", #glmmTMB MvGLM
-                               "violet" #gllvm)
-                               )) +
+                                "#E41A1C", # MvGLM (Red)
+                                "cyan3", #glmmTMB MvGLM
+                                "violet" #gllvm)
+  )) +
   scale_shape_manual(values = c(21, 21, 21, 21)) +
   scale_fill_manual(values = c("#377EB8",  # PERMANOVA (Blue)
                                "#E41A1C", # MvGLM (Red)
                                "cyan3", #glmmTMB MvGLM
                                "violet" #gllvm)
-                               )) +
+  )) +
   scale_linetype_manual(values = c("solid", "solid", "solid", "solid")) +
   facet_wrap(~param_display_name, scales = "free_x", ncol = 2) +
   theme_bw() +
@@ -307,12 +268,3 @@ perf_plot
 
 ggsave("figures/power_analysis_plot.png", perf_plot, 
        width = 10, height = 7, dpi = 300, units = "in")
-```
-
-
-
-
-
-
-
-
