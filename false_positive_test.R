@@ -47,14 +47,14 @@ fixed_total_biomass <- 1000000
 # Vessel needs to be defined for some of the analyses
 nvess <- 1
 # Set how many populations per scenario to generate
-n_samples_per_level <- 2        # 
+n_samples_per_level <- 200        # 
 # Set the number of trips 
 ntrips <- 500
 # Set scalar for Tweedie distributions
 mu_scalar <- 100
 
 #'`====================================================================================================================`
-for(i in 1:4){
+for(i in 1:5){
   set_number <- i # Set this
   
   # Generate Trip Populations ============================================================================================
@@ -278,6 +278,6 @@ for(i in 1:4){
   gc(verbose = FALSE)
   Sys.sleep(10) # 10 second breather before the next major set begins
   
-} # End of the main for(i in 1:4) loop!
+} # End of the main loop!
 
 # go to false_positive_test_tables_figures.r
