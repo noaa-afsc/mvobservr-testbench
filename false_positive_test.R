@@ -54,7 +54,7 @@ ntrips <- 500
 mu_scalar <- 100
 
 #'`====================================================================================================================`
-for(i in 90:100){
+for(i in 6:10){
   set_number <- i # Set this
 
   # Generate Trip Populations ============================================================================================
@@ -229,7 +229,7 @@ for(i in 90:100){
     rm(processed_df, out)
     closeAllConnections() # Closes any hanging parallel socket connections
     gc(verbose = FALSE)
-    Sys.sleep(1) # Tiny micro-pause between cores
+    Sys.sleep(10) 
   }
   
   # Combine all list elements into a single data frame
@@ -243,7 +243,7 @@ for(i in 90:100){
   ## Clean memory before combining
   rm(res_m_list)
   gc(verbose = FALSE)
-  Sys.sleep(5)
+  Sys.sleep(1)
   
   # Save Batch Results ===================================================================================================
   
@@ -272,10 +272,13 @@ for(i in 90:100){
   save(res_comb, n_samples_per_level, file = alltests_name)
   gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)
   
+  Sys.sleep(10)
+  
   # Final cleanup for this set iteration
   rm(trip_sets, trip_sets_adj, res_t, res_g, res_tt, res_p, res_m, res_glmm, 
      res_gllvm, res_glmm_lv1, res_gllvm_lv1, res_permute, res_comb)
   gc(verbose = FALSE)
+  
   Sys.sleep(10) # 10 second breather before the next major set begins
   
 } # End of the main loop!
