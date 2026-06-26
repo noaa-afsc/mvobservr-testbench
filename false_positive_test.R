@@ -54,9 +54,9 @@ ntrips <- 500
 mu_scalar <- 100
 
 #'`====================================================================================================================`
-for(i in 1:5){
+for(i in 90:100){
   set_number <- i # Set this
-  
+
   # Generate Trip Populations ============================================================================================
   seed_max <- set_number*3
   seed_seq <- seq(seed_max - 2, seed_max, 1)
@@ -188,7 +188,7 @@ for(i in 1:5){
        res_glmm_lv1, res_gllvm_lv1, file = allbutmv_name)
   
   # Upload to the Google Shared Drive
-  gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
+#  gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
   
   ## Clean memory explicitly before heavy parallel execution
   rm(res_p_list)
@@ -238,7 +238,7 @@ for(i in 1:5){
   ## *Save and upload mvglm results --------------------------------------------------------------------------------------
   mvglm_name <- paste0("output_data/mvglmloop_falsepos_set", set_number, ".Rdata")
   save(res_m, file = mvglm_name)
-  gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
+#  gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
   
   ## Clean memory before combining
   rm(res_m_list)
