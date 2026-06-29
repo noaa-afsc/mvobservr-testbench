@@ -169,7 +169,7 @@ res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE) %>%
 
 #with mvobservr
 res_m <- imap(1:length(trip_sets_adj), ~{
-  print(paste0("***set ", .x, " ", now()))
+  print(paste0("***sample ", .x, " ", now()))
   trip_sets_adj[[.x]] %>%
     mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
     pivot_longer(cols=starts_with("sp_"),
