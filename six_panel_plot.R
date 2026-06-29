@@ -10,13 +10,15 @@ library(vegan)
 library(gdrive)
 library(mvobservr) # devtools::install_github("noaa-afsc/mvobservr")
 
-set <- 1  # 1 or 2
+# for reproducibility
+set_number <- 1 # Set this
+
 output_name <- paste0("output_data/param_plot_set", set, ".Rdata")
 
 # Constants ----
 # Set how many populations per scenario to generate
 # There are 30 combinations, so 1 n_samples_per_level is 30 populations to test.
-n_samples_per_level <- 1 #3000 populations at 100
+n_samples_per_level <- 50 #3000 populations at 100, but takes 40 hours to run.  Dropping back to 50 for overnight runs.
 
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
 bias <- c(0, -0.25)
@@ -73,12 +75,12 @@ param_values_df <- params_to_test %>%
   select(-name)
 
 # Generate data ----
-# for reproducibility
-if(set == 1) {
-  set.seed(123)
-} else if (set == 2) {
-  set.seed(456)
-} else stop("'set' needs to be either 1 or 2!")
+
+# Generate Trip Populations ============================================================================================
+seed_max <- set_number*3
+seed_seq <- seq(seed_max - 2, seed_max, 1)
+seed_num <- as.numeric(paste(seed_seq, collapse = ""))
+set.seed(seed_num)
 
 trip_sets_adj <- map(rep(1:nrow(param_values_df), n_samples_per_level), ~{
   #replace the variable parameter with the loop value, all other values remain t default
