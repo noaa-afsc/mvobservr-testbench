@@ -7,8 +7,8 @@ source("functions/MvGLMglmm.R")
 library(gllvm)
 source("functions/MvGLMgllvm.R")
 library(vegan)
-library(gdrive)
-library(mvobservr) # devtools::install_github("noaa-afsc/mvobservr")
+library(gdrive) # pak::pak("noaa-afsc/gdrive")
+library(mvobservr) # # pak::pak("noaa-afsc/mvobservr")
 
 # for reproducibility
 set_number <- 1 # Set this
