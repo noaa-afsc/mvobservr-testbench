@@ -13,7 +13,7 @@ library(mvobservr) # # pak::pak("noaa-afsc/mvobservr")
 # for reproducibility
 set_number <- 1 # Set this
 
-output_name <- paste0("output_data/param_plot_set", set, ".Rdata")
+output_name <- paste0("output_data/TESTINGparam_plot_set_ADONIS50_set_", set_number, ".Rdata")
 
 # Constants ----
 # Set how many populations per scenario to generate
