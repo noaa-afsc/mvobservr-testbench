@@ -270,7 +270,9 @@ for(i in 26:30){
   
   alltests_name <- paste0("output_data/alltests_falsepos_set", set_number, ".Rdata")
   save(res_comb, n_samples_per_level, file = alltests_name)
-  gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)
+  gdrive_upload(local_path = alltests_name, 
+                gdrive_dribble = output_dribble, 
+                skip_prompt = set_skip_prompt)
   
   Sys.sleep(10)
   
