@@ -250,7 +250,7 @@ res_p %>%
 
 ## *Save all but mvglm --------------------------------------------------------------------------------------------------
 
-allbutmv_name <- paste0("output_data/allbutmv_falsepos.Rdata")
+allbutmv_name <- paste0("output_data/allbutmv_falsepos_set_", set_number, ".Rdata")
 save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_glmm, res_gllvm, 
      res_glmm_lv1, res_gllvm_lv1, file = allbutmv_name)
 
@@ -295,7 +295,7 @@ res_m %>%
 
 ## *Save and upload mvglm results --------------------------------------------------------------------------------------
 
-mvglm_name <- paste0("output_data/mvglmloop_falsepos.Rdata")
+mvglm_name <- paste0("output_data/mvglmloop_falsepos_set_", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
 gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
 
@@ -329,7 +329,7 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_permute, by = "set")
 res_comb
 
-alltests_name <- paste0("output_data/alltests_falsepos.Rdata")
+alltests_name <- paste0("output_data/alltests_falsepos_set_", set_number, ".Rdata")
 save(res_comb, n_samples_per_level, file = alltests_name)
 gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)
 
