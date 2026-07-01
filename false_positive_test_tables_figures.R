@@ -5,19 +5,14 @@ library(tidyverse)
 library(broom)
 library(gdrive)
 
-# 1. Define the Google Drive folder ID
-folder_id <- "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt"
+mvobservr_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 
-# 2. Tell Google Drive to list all files in that folder that match your naming pattern
+#list all files in google drive folder that match your naming pattern
 # The 'pattern' argument acts as a search filter
-drive_files <- drive_ls(path = as_id(folder_id), pattern = "alltests_falsepos_set")
+drive_files <- gdrive_ls(mvobservr_dribble)
+drive_files <- drive_files %>% filter(grepl(pattern = "^alltests_falsepos_set_", x = name))
 
-# Extract just the exact file names from the Google Drive query
 file_names <- drive_files$name
-cat("Awesome, found", length(file_names), "files to process!\n")
-
-# 3. Set up your custom wrapper dribble as before
-mvobservr_dribble <- gdrive_set_dribble(folder_id = folder_id)
 
 # Initialize our empty master dataframe
 res_comb_tbl <- tibble()
@@ -45,6 +40,9 @@ for(current_name in file_names) {
     message("--> Skipped ", current_file, " (Error: ", e$message, ")")
   })
 }
+
+#TODO - combine batches.
+#TODO - revert (decision - to the former bootstrap version of this figure - see false_positive_test_ccf5693.r)
 
 ## figure: boxplot for false positives ----
 res_fp <- res_comb_tbl %>%
