@@ -86,46 +86,83 @@ res_fp <- res_comb_tbl %>%
     test = fct_reorder(test, sig, .fun = mean, .na_rm = TRUE)
   )
 
-## 1. Calculate Exact Binomial Confidence Intervals ----
-fpr_stats <- res_fp %>%
-  group_by(test) %>%
-  summarize(
-    total_runs = n(),
-    false_positives = sum(sig, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    # Run an exact binomial test against the expected 0.05 rate
-    binom_res = map2(false_positives, total_runs, ~binom.test(x = .x, n = .y, p = 0.05)),
-    # Extract the point estimate, p-value, and 95% CI into columns
-    tidied = map(binom_res, tidy)
-  ) %>%
-  unnest(tidied) %>%
-  select(test, estimate, conf.low, conf.high, p.value)
- # For extracting tidy test results
+#Prep bootstrap figure.
+set.seed(123) # Ensure reproducibility for the bootstrap
+n_bootstraps <- 1000
 
-## 2. Generate the Point-Range Plot ----
-fpr_plot <- fpr_stats %>%
-  # Order the tests from highest false positive rate to lowest for clean reading
-  mutate(test = fct_reorder(test, estimate)) %>%
-  ggplot(aes(y = test, x = estimate)) +
-  
-  # Add the error bars (95% CI) and the point estimate using the modern geom_errorbar
-  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), width = 0.2, linewidth = 0.8) +
-  geom_point(size = 3, color = "black") +
-  geom_vline(xintercept = 0.05, linetype = "dashed", color = "red", linewidth = 1) +
-  
+fpr_plot <- map(1:n_bootstraps, ~{
+  slice_sample(res_fp, n = n_samples_per_level, by = test, replace = TRUE) %>%
+    mutate(boot = .x)
+}) %>%
+  list_rbind() %>%
+  group_by(boot, test) %>%
+  summarize(pctsig = mean(sig), .groups = "drop") %>%
+  ggplot(aes(x = test, y = pctsig)) + #fill was = test
+  geom_violin(alpha = 0.5, fill = 'black', quantiles = c(0.25, 0.5, 0.75), 
+              quantile.linetype = 1, quantile.color = "white") +
+  stat_summary(fun = "mean", geom = "point", size = 2, color = "white") +
   theme_classic() +
-  labs(y = NULL, x = "False Positive Rate (95% Confidence Interval)") +
-  
-  # Format x-axis as percentages
-  scale_x_continuous(labels = scales::percent_format()) +
-  
+  labs(
+    x = NULL,
+    y = "Percentage of Positive (Significant) Tests",
+    # title = "False Positive Rate of Tests on Total Biomass",
+    #subtitle = paste0(round(trip_coverage * 100, 0), "% coverage")
+  ) +
+  scale_y_continuous(labels = scales::label_percent()) +
+  # Reference lines for standard alpha levels
+  geom_hline(yintercept = c(0.05), linetype = 'dashed', linewidth = 1) +
   theme(
-    axis.text = element_text(size = 11, color = "black"),
-    axis.title.x = element_text(margin = margin(t = 10))
+    legend.position = "none",
+    
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
 fpr_plot
+
+
+
+
+# Below is for making an exact binomial figure
+{## 1. Calculate Exact Binomial Confidence Intervals ----
+# fpr_stats <- res_fp %>%
+#   group_by(test) %>%
+#   summarize(
+#     total_runs = n(),
+#     false_positives = sum(sig, na.rm = TRUE),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     # Run an exact binomial test against the expected 0.05 rate
+#     binom_res = map2(false_positives, total_runs, ~binom.test(x = .x, n = .y, p = 0.05)),
+#     # Extract the point estimate, p-value, and 95% CI into columns
+#     tidied = map(binom_res, tidy)
+#   ) %>%
+#   unnest(tidied) %>%
+#   select(test, estimate, conf.low, conf.high, p.value)
+#  # For extracting tidy test results
+# 
+# ## 2. Generate the Point-Range Plot ----
+# fpr_plot <- fpr_stats %>%
+#   # Order the tests from highest false positive rate to lowest for clean reading
+#   mutate(test = fct_reorder(test, estimate)) %>%
+#   ggplot(aes(y = test, x = estimate)) +
+#   
+#   # Add the error bars (95% CI) and the point estimate using the modern geom_errorbar
+#   geom_errorbar(aes(xmin = conf.low, xmax = conf.high), width = 0.2, linewidth = 0.8) +
+#   geom_point(size = 3, color = "black") +
+#   geom_vline(xintercept = 0.05, linetype = "dashed", color = "red", linewidth = 1) +
+#   
+#   theme_classic() +
+#   labs(y = NULL, x = "False Positive Rate (95% Confidence Interval)") +
+#   
+#   # Format x-axis as percentages
+#   scale_x_continuous(labels = scales::percent_format()) +
+#   
+#   theme(
+#     axis.text = element_text(size = 11, color = "black"),
+#     axis.title.x = element_text(margin = margin(t = 10))
+#   )
+# fpr_plot
+  }
 
 ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
        width = 5, height = 4, units = "in", dpi = 300) 
