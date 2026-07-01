@@ -118,9 +118,6 @@ fpr_plot <- map(1:n_bootstraps, ~{
   )
 fpr_plot
 
-
-
-
 # Below is for making an exact binomial figure
 {## 1. Calculate Exact Binomial Confidence Intervals ----
 # fpr_stats <- res_fp %>%
