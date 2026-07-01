@@ -41,7 +41,6 @@ for(current_name in file_names) {
   })
 }
 
-#TODO - combine batches.
 #TODO - revert (decision - to the former bootstrap version of this figure - see false_positive_test_ccf5693.r)
 
 ## figure: boxplot for false positives ----
