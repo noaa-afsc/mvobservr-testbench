@@ -86,7 +86,24 @@ res_fp <- res_comb_tbl %>%
     test = fct_reorder(test, sig, .fun = mean, .na_rm = TRUE)
   )
 
+## 1. Calculate Exact Binomial Confidence Intervals ----
+fpr_stats <- res_fp %>%
+  group_by(test) %>%
+  summarize(
+    total_runs = n(),
+    false_positives = sum(sig, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Run an exact binomial test against the expected 0.05 rate
+    binom_res = map2(false_positives, total_runs, ~binom.test(x = .x, n = .y, p = 0.05)),
+    # Extract the point estimate, p-value, and 95% CI into columns
+    tidied = map(binom_res, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  select(test, estimate, conf.low, conf.high, p.value)
  # For extracting tidy test results
+
 ## 2. Generate the Point-Range Plot ----
 fpr_plot <- fpr_stats %>%
   # Order the tests from highest false positive rate to lowest for clean reading
