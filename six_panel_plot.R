@@ -10,15 +10,18 @@ library(vegan)
 library(gdrive) # pak::pak("noaa-afsc/gdrive")
 library(mvobservr) # # pak::pak("noaa-afsc/mvobservr")
 
-# for reproducibility
-set_number <- 1 # Set this
 
-output_name <- paste0("output_data/TESTINGparam_plot_set_ADONIS50_set_", set_number, ".Rdata")
+set_skip_prompt <- T  #for cloud
+
+# for reproducibility
+set_number <- 90 # Set this
+
+output_name <- paste0("output_data/param_plot_set", set_number, ".Rdata")
 
 # Constants ----
 # Set how many populations per scenario to generate
 # There are 30 combinations, so 1 n_samples_per_level is 30 populations to test.
-n_samples_per_level <- 50 #3000 populations at 100, but takes 40 hours to run.  Dropping back to 50 for overnight runs.
+n_samples_per_level <- 1 #3000 populations at 100, but takes 40 hours to run.  Dropping back to 50 for overnight runs.
 
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
 bias <- c(0, -0.25)
@@ -153,7 +156,8 @@ adon_formula = "Y~factor(obs)"
 
 res_p <- map(trip_sets_adj, ~{
   Y <- .x %>% dplyr::select(starts_with("sp_"))
-  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = n_permutations, method="bray")
+  adon <- vegan::adonis2(as.formula(adon_formula), data = .x, 
+                         permutations = n_permutations, method="bray")
   data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
 }, .progress=TRUE) #1 min for 60 sets
 res_p <- list_rbind(res_p, names_to = "set")
@@ -174,13 +178,17 @@ res_m <- imap(1:length(trip_sets_adj), ~{
     mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
     pivot_longer(cols=starts_with("sp_"),
                  names_to = 'species', values_to = 'biomass') %>%
-    mvglm_obs(block = NULL, add_var = NULL, n_permutations= n_permutations, nCores = TRUE) %>%
+    mvglm_obs(block = NULL, add_var = NULL, n_permutations = n_permutations, 
+              nCores = parallel::detectCores()-2) %>%
     pluck("results") %>%
     {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
     pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
 })
 res_m <- list_rbind(res_m, names_to = "set") %>%
   filter(metric == "biomass_total")
+
+gc(verbose = FALSE)
+Sys.sleep(10) 
 
 #combine output
 res_comb <- map(trip_sets_adj, ~ .x[1, c("param_mod", "param_value")]) %>%
@@ -195,17 +203,46 @@ save(res_comb, file = output_name)
 
 #upload files to gdrive only once when transferring from data ran on cloud workstation
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
-gdrive_upload(local_path = output_name, gdrive_dribble = mvobservr_dribble)
+gdrive_upload(local_path = output_name, 
+              gdrive_dribble = mvobservr_dribble, 
+              skip_prompt = set_skip_prompt)
 
-# Quick pulldown and figure generation ----
-#pull down and load data files from gdrive
+# Quick pulldown and figure generation ------------------------------------------------------
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
-load(gdrive_download(local_path = "output_data/param_plot_set1.Rdata", gdrive_dribble = mvobservr_dribble))
-res_comb_tbl <- res_comb
-load(gdrive_download(local_path = "output_data/param_plot_set2.Rdata", gdrive_dribble = mvobservr_dribble))
-res_comb <- res_comb |> mutate(set = set + max(res_comb_tbl$set))
-res_comb_tbl <- rbind(res_comb_tbl, res_comb)
-rm(res_comb)
+
+#list all files in google drive folder that match your naming pattern
+# The 'pattern' argument acts as a search filter
+drive_files <- gdrive_ls(mvobservr_dribble)
+drive_files <- drive_files %>% filter(grepl(pattern = "^param_plot_set", x = name))
+
+file_names <- drive_files$name
+
+# Initialize our empty master dataframe
+res_comb_tbl <- tibble()
+
+# 4. Loop over the EXACT file names we just pulled from the cloud
+for(current_name in file_names) {
+  # Reconstruct the path exactly how your gdrive_download function expects it
+  current_file <- paste0("output_data/", current_name)
+  cat("Downloading and processing:", current_file, "\n")
+  tryCatch({
+    load(gdrive_download(local_path = current_file, gdrive_dribble = mvobservr_dribble))
+    if(nrow(res_comb_tbl) == 0) {
+      # For the very first file, assign it and add a tracking column
+      res_comb_tbl <- res_comb |> 
+        mutate(source_file = current_name)
+    } else {
+      # For all subsequent files, offset the set ID, add the tracking column, and bind
+      res_comb <- res_comb |> 
+        mutate(set = set + max(res_comb_tbl$set), source_file = current_name)
+      res_comb_tbl <- bind_rows(res_comb_tbl, res_comb)
+    }
+    # Clean up the single batch
+    rm(res_comb)
+  }, error = function(e) {
+    message("--> Skipped ", current_file, " (Error: ", e$message, ")")
+  })
+}
 
 #make plot
 perf_plot_dat <- 
