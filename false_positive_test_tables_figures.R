@@ -1,9 +1,10 @@
 # Stitch sets  ===================================================================================================
 # loads data previously run from false_positive_test.r
-library(kableExtra)
 library(tidyverse)
 library(broom)
 library(gdrive)
+library(flextable)
+library(officer)
 
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 
@@ -189,45 +190,37 @@ create_summary_table <- function(data, select_prefix, remove_pattern) {
     arrange(as.numeric(Mean))
 }
 
-# Function to turn those data frames into publication-ready kables
-make_publication_kable <- function(df, caption_text, value_label = "") {
-  
-  # 1. Base table setup (keeping Mean and CI separated)
-  kbl_out <- df %>% 
-    mutate(CI = sprintf("(%s, %s)", ci_lower, ci_upper)) %>%
-    select(Model, N, Mean, CI) %>%
-    kbl(
-      caption = caption_text, 
-      booktabs = TRUE,
-      align = c("l", "c", "r", "l"), # Model=l, N=c, Mean=r, CI=l
-      col.names = c("Model", "N", "Mean", "(95% CI)")
-    ) %>%
-    kable_classic(full_width = FALSE, html_font = "Times New Roman")
-  
-  # 2. Only add the spanning header if value_label is NOT blank/null
-  if (!is.null(value_label) && value_label != "") {
-    spanning_header <- setNames(c(1, 1, 2), c(" ", " ", value_label))
-    kbl_out <- kbl_out %>% add_header_above(spanning_header, bold = TRUE)
-  }
-  
-  # 3. Clean up the final row headers
-  kbl_out %>% row_spec(0, bold = TRUE)
+# 2. MEE-compliant Flextable function
+make_mee_word_table <- function(df, caption_text, value_label) {
+  df %>%
+    mutate(Estimate = sprintf("%s (%s, %s)", Mean, ci_lower, ci_upper)) %>%
+    select(Model, N, !!sym(value_label) := Estimate) %>%
+    
+    flextable() %>%
+    # BES Styling Guidelines
+    theme_booktabs() %>% 
+    set_caption(caption = caption_text, align_with_table = TRUE) %>% 
+    font(fontname = "Times New Roman", part = "all") %>%
+    fontsize(size = 11, part = "all") %>%
+    bold(part = "header") %>%
+    
+    # Text left-aligned, numbers/CIs centered
+    align(align = "left", j = "Model", part = "all") %>%
+    align(align = "center", j = c("N", value_label), part = "all") %>%
+    autofit()
 }
 
-# 3. Generate the underlying data
+# 3. Generate DataFrames
 runtimes_df <- create_summary_table(res_comb_tbl, "runtime", "runtime_secs_")
 power_df    <- create_summary_table(res_comb_tbl, "pwr", "pwr_")
 
-## Table 1: Runtimes ----
-runtimes_df %>% 
-  make_publication_kable(
-    caption_text = "Table 1: Computational Runtimes for False Positives", 
-    value_label  = "" #Mean Runtime in Seconds (95% CI)"
-  )
+# 4. Generate MEE-formatted Word Tables
+word_table1 <- runtimes_df %>% make_mee_word_table("Table 1. Computational runtimes for false positives.", "Mean runtime in seconds (95% CI)")
+word_table2 <- power_df    %>% make_mee_word_table("Table 2. Tweedie power statistics for false positives.", "Mean Tweedie power (95% CI)")
 
-## Table 2: Tweedie Power ----
-power_df %>% 
-  make_publication_kable(
-    caption_text = "Table 2: Tweedie Power Statistics for False Positives", 
-    value_label  = "" #Mean Tweedie Power (95% CI)"
-  )
+# 5. Export directly to your MEE manuscript directory
+save_as_docx(
+  "Table 1" = word_table1, 
+  "Table 2" = word_table2, 
+  path = "output_data/MEE_manuscript_tables.docx"
+)
