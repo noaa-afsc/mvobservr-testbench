@@ -21,9 +21,8 @@ MvGLMgllvm <- function(dat, n_lv = 0) {
         y = Y, 
         family = "tweedie", 
         num.lv = n_lv, 
-        Power = tweedie_power_arg,             # Dynamically assigned
-      #  starting.val = "zero",                 # Bypasses initialization crashes
-        control = list(trace = 0, maxit = 1000) # Circuit breaker
+        Power = tweedie_power_arg,             
+        control = list(trace = 0, maxit = 1000) 
       )
       m_null <- m_null_out$result 
       
@@ -34,16 +33,15 @@ MvGLMgllvm <- function(dat, n_lv = 0) {
         formula = ~ obs,
         family = "tweedie", 
         num.lv = n_lv, 
-        Power = tweedie_power_arg,             # Dynamically assigned
-       # starting.val = "zero",                 # Bypasses initialization crashes
-        control = list(trace = 0, maxit = 1000) # Circuit breaker
+        Power = tweedie_power_arg,             
+        control = list(trace = 0, maxit = 1000) 
       )
       m_full <- m_full_out$result
       
       # 5. Tripwire: Force failure if the optimizer didn't converge cleanly
       if (m_full$convergence != TRUE) stop() 
       
-      # 6. Run the anova test silently to protect the progress bar
+      # 6. Run the anova test silently
       anova_out <- quiet_anova(m_null, m_full)
       anova_res <- anova_out$result
       
@@ -56,8 +54,11 @@ MvGLMgllvm <- function(dat, n_lv = 0) {
     }, timeout = 60, onTimeout = "error") 
     
   }, error = function(e) { 
-    data.frame(p_gllvm = NA_real_, pwr_gllvm = NA_real_, runtime_secs_gllvm = NA_real_) 
+    # The insurance policy: conditionally matching the NA type to the success type
+    data.frame(
+      p_gllvm = NA_real_, 
+      pwr_gllvm = if (n_lv == 0) NA_real_ else NA_character_, 
+      runtime_secs_gllvm = NA_real_
+    ) 
   }) 
 }
-
-
