@@ -2,7 +2,6 @@ MvGLMgllvm <- function(dat, n_lv = 0) {
   start_time <- Sys.time()
   
   tryCatch({ 
-    # Secondary safety net: timeout lowered back to 60 seconds
     R.utils::withTimeout({
       
       # 1. Isolate the response matrix (Y) and predictor (X)
@@ -10,17 +9,21 @@ MvGLMgllvm <- function(dat, n_lv = 0) {
       X <- dat %>% select(obs)
       
       # 2. Create silenced versions of both gllvm and anova
-      quiet_gllvm <- purrr::quietly(gllvm)
+      quiet_gllvm <- purrr::quietly(gllvm::gllvm)
       quiet_anova <- purrr::quietly(anova)
       
-      # 3. Fit the Null Model silently
+      # 3. Conditional logic for Tweedie power estimation
+      # If no latent variables, estimate it (NULL). Otherwise, lock it at 1.6.
+      tweedie_power_arg <- if (n_lv == 0) NULL else 1.6
+      
+      # 4. Fit the Null Model silently
       m_null_out <- quiet_gllvm(
         y = Y, 
         family = "tweedie", 
         num.lv = n_lv, 
-        Power = 1.6, #Manually setting this bc its search using NULL causes it to hang.
-        #starting.val = "zero",              
-        control = list(trace = 0, maxit = 1000) 
+        Power = tweedie_power_arg,             # Dynamically assigned
+      #  starting.val = "zero",                 # Bypasses initialization crashes
+        control = list(trace = 0, maxit = 1000) # Circuit breaker
       )
       m_null <- m_null_out$result 
       
@@ -31,32 +34,29 @@ MvGLMgllvm <- function(dat, n_lv = 0) {
         formula = ~ obs,
         family = "tweedie", 
         num.lv = n_lv, 
-        Power = 1.6,  #Manually setting this bc its search using NULL causes it to hang.
-        #starting.val = "zero",                 
-        control = list(trace = 0, maxit = 1000) 
+        Power = tweedie_power_arg,             # Dynamically assigned
+       # starting.val = "zero",                 # Bypasses initialization crashes
+        control = list(trace = 0, maxit = 1000) # Circuit breaker
       )
       m_full <- m_full_out$result
       
-      # 4. Tripwire: Force failure if the optimizer didn't converge cleanly
+      # 5. Tripwire: Force failure if the optimizer didn't converge cleanly
       if (m_full$convergence != TRUE) stop() 
       
-      # 5. Run the anova test silently to protect the progress bar
+      # 6. Run the anova test silently to protect the progress bar
       anova_out <- quiet_anova(m_null, m_full)
       anova_res <- anova_out$result
       
-      # 6. Calculate runtime and return metrics
+      # 7. Calculate runtime and conditionally return text or numeric for power
       data.frame(
         p_gllvm            = as.numeric(anova_res$`P.value`[2]),
-        pwr_gllvm          = as.numeric(m_full$Power),
+        pwr_gllvm          = if (n_lv == 0) as.numeric(m_full$Power) else "1.6 (fixed)",
         runtime_secs_gllvm = as.numeric(difftime(Sys.time(), start_time, units = "secs"))
       )
     }, timeout = 60, onTimeout = "error") 
     
   }, error = function(e) { 
-    # If any error, non-convergence stop(), or timeout occurs, return NAs
-    data.frame(p_gllvm = NA_real_, 
-               pwr_gllvm = NA_real_, 
-               runtime_secs_gllvm = NA_real_) 
+    data.frame(p_gllvm = NA_real_, pwr_gllvm = NA_real_, runtime_secs_gllvm = NA_real_) 
   }) 
 }
 
