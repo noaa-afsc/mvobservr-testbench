@@ -7,6 +7,8 @@ library(glmmTMB)
 library(gllvm)
 library(lme4)
 library(tweedie)
+library(future) #for parallel of gllvm and glmm
+library(furrr)  #as above
 
 source("functions/triplet_stats.R")
 source("functions/TripletAnalysis.R")
@@ -18,6 +20,10 @@ source("functions/MvGLMgllvm.R")
 source("functions/assign_sig.R")
 source("functions/ObserverEffectStats.R")
 source("functions/perm_fxn.R")
+
+# Restrict TMB to a single thread to prevent GCP CPU thrashing
+TMB::openmp(n = 1, DLL = "gllvm")
+TMB::openmp(n = 1, DLL = "glmmTMB")
 
 #' `===================================================================================================================`
 
@@ -59,7 +65,7 @@ mu_scalar <- 100
 
 # Generate Trip Populations ============================================================================================
 
-set_number <- 1 # Set this
+set_number <- 3 # Set this
 
 # Generate Trip Populations ============================================================================================
 seed_max <- set_number*3
@@ -177,27 +183,54 @@ res_tt <- list_rbind(res_tt, names_to = "set")
 res_glmm <- trip_sets_adj %>% map(MvGLMglmm, lv = 0, .progress = TRUE)
 res_glmm  <- list_rbind(res_glmm, names_to = "set")
 
+# Setup parallel backend (run this before your model blocks)
+n_cores <- availableCores() - 2 
+plan(multisession, workers = n_cores)
+
 # MvGLM with glmTMB and lv ------------------------------------------------
 
 #only one latent variable bc we have two species and lv < df.
-res_glmm_lv1 <- trip_sets_adj %>% map(MvGLMglmm, lv = 1, .progress = TRUE)
+res_glmm_lv1 <- future_map(trip_sets_adj, ~{
+  Sys.setenv(OMP_NUM_THREADS = 1)
+  out <- MvGLMglmm(.x, lv = 1)
+  gc()
+  out
+}, .progress = TRUE, .options = furrr_options(seed = TRUE))
+
 res_glmm_lv1  <- list_rbind(res_glmm_lv1, names_to = "set") %>% 
   rename(p_glmm1 = p_glmm,
          pwr_glmm1 = pwr_glmm,
          runtime_secs_glmm1 = runtime_secs_glmm)
 
-# MvGLM with GLLVM ----------------------------------------------------------------------------------------------------------------
 
-res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE)
+# MvGLM with GLLVM --------------------------------------------------------
+
+res_gllvm <- future_map(trip_sets_adj, ~{
+  Sys.setenv(OMP_NUM_THREADS = 1)
+  out <- MvGLMgllvm(.x)
+  gc()
+  out
+}, .progress = TRUE, .options = furrr_options(seed = TRUE))
+
 res_gllvm  <- list_rbind(res_gllvm, names_to = "set")
+
 
 # MvGLM with GLLVM and 1 latent variables ---------------------------------
 
-res_gllvm_lv1 <- map(trip_sets_adj, ~MvGLMgllvm(.x, n_lv = 1), .progress = TRUE)
+res_gllvm_lv1 <- future_map(trip_sets_adj, ~{
+  Sys.setenv(OMP_NUM_THREADS = 1)
+  out <- MvGLMgllvm(.x, n_lv = 1)
+  gc()
+  out
+}, .progress = TRUE, .options = furrr_options(seed = TRUE)) 
+
 res_gllvm_lv1  <- list_rbind(res_gllvm_lv1, names_to = "set") %>% 
   rename(p_gllvm1 = p_gllvm,
          runtime_secs_gllvm1 = runtime_secs_gllvm,
          pwr_gllvm1 = pwr_gllvm)
+
+# Clean up parallel workers and return R to normal sequential operation
+plan(sequential)
 
 ## Permanova -----------------------------------------------------------------------------------------------------------
 
