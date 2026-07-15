@@ -150,12 +150,6 @@ if(!all(mapply(function(x, y) all(x$sp_2 == y$sp_2), x = trip_sets, y = trip_set
 res_t <- map(trip_sets_adj, ~runTandFtests(.x, "biomass_total"))
 res_t <- list_rbind(res_t, names_to = "set")
 
-res_t %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(tp < 0.05), mean(Fp < 0.05))
-
-
 ## Univariate Permutation ----------------------------------------------------------------------------------------------
 
 res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x, 
@@ -166,21 +160,10 @@ res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x,
 # Combine results into a 500-row table
 res_permute <- list_rbind(res_p_list, names_to = "set")
 
-res_permute %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mn = mean(p_val<0.05, na.rm = TRUE))
-
 ## Univariate GLMM -----------------------------------------------------------------------------------------------------
 
 res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
 res_g <- list_rbind(res_g, names_to = "set")
-
-res_g %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mn = mean(glm_mgcv_p<0.05, na.rm = TRUE), 
-            n_success_of_100 = sum(!is.na(glm_mgcv_p)))
 
 gc(verbose = FALSE)
 
@@ -189,19 +172,10 @@ gc(verbose = FALSE)
 res_tt <- map(trip_sets_adj, ~TripletAnalysis(.x, "biomass_total", bootstrap_reps = nperm), .progress = TRUE)
 res_tt <- list_rbind(res_tt, names_to = "set")
 
-res_tt %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(KSp < 0.05), mean(ci_lo > 0 | ci_hi < 0))
-
 # MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
 
 res_glmm <- trip_sets_adj %>% map(MvGLMglmm, lv = 0, .progress = TRUE)
 res_glmm  <- list_rbind(res_glmm, names_to = "set")
-
-res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(p_glmm < 0.05))
 
 # MvGLM with glmTMB and lv ------------------------------------------------
 
@@ -212,18 +186,10 @@ res_glmm_lv1  <- list_rbind(res_glmm_lv1, names_to = "set") %>%
          pwr_glmm1 = pwr_glmm,
          runtime_secs_glmm1 = runtime_secs_glmm)
 
-res_glmm_lv1 %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(p_glmm1 < 0.05))
-
 # MvGLM with GLLVM ----------------------------------------------------------------------------------------------------------------
 
 res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE)
 res_gllvm  <- list_rbind(res_gllvm, names_to = "set")
-
-res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(p_gllvm < 0.05))
 
 # MvGLM with GLLVM and 1 latent variables ---------------------------------
 
@@ -243,15 +209,10 @@ res_p <- map(trip_sets_adj, ~{
 }, .progress=TRUE) 
 res_p <- list_rbind(res_p, names_to = "set")
 
-res_p %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(perma_p<0.05))
-
 ## *Save all but mvglm --------------------------------------------------------------------------------------------------
 
 allbutmv_name <- paste0("output_data/allbutmv_falsepos_set_", set_number, ".Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_glmm, res_gllvm, 
+save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_glmm, res_gllvm,
      res_glmm_lv1, res_gllvm_lv1, file = allbutmv_name)
 
 # Upload to the Google Shared Drive
