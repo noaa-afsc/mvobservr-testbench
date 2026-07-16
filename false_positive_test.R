@@ -9,6 +9,7 @@ library(lme4)
 library(tweedie)
 library(future) #for parallel of gllvm and glmm
 library(furrr)  #as above
+library(progressr) #for custom progress bars
 
 source("functions/triplet_stats.R")
 source("functions/TripletAnalysis.R")
@@ -187,15 +188,29 @@ res_glmm  <- list_rbind(res_glmm, names_to = "set")
 n_cores <- availableCores() - 2 
 plan(multisession, workers = n_cores)
 
+# Setup custom progress bars
+handlers(handler_progress(
+  format = "Running [:bar] :percent | Elapsed: :elapsed | ETA: :eta",
+  clear = FALSE
+))
+
 # MvGLM with glmTMB and lv ------------------------------------------------
 
 #only one latent variable bc we have two species and lv < df.
-res_glmm_lv1 <- future_map(trip_sets_adj, ~{
-  Sys.setenv(OMP_NUM_THREADS = 1)
-  out <- MvGLMglmm(.x, lv = 1)
-  gc()
-  out
-}, .progress = TRUE, .options = furrr_options(seed = TRUE))
+res_glmm_lv1 <- with_progress({
+  # 1. Initialize the progressor with the total number of steps
+  p <- progressor(steps = length(trip_sets_adj))
+  p(amount = 0)
+  # 2. Run future_map (note: .progress = TRUE is removed)
+  future_map(trip_sets_adj, ~{
+    Sys.setenv(OMP_NUM_THREADS = 1)
+    out <- MvGLMglmm(.x, lv = 1)
+    gc()
+    # 3. Signal that a step has finished
+    p()
+    out
+  }, .options = furrr_options(seed = TRUE))
+})
 
 res_glmm_lv1  <- list_rbind(res_glmm_lv1, names_to = "set") %>% 
   rename(p_glmm1 = p_glmm,
@@ -205,24 +220,34 @@ res_glmm_lv1  <- list_rbind(res_glmm_lv1, names_to = "set") %>%
 
 # MvGLM with GLLVM --------------------------------------------------------
 
-res_gllvm <- future_map(trip_sets_adj, ~{
+res_gllvm <- with_progress({
+  p <- progressor(steps = length(trip_sets_adj))
+  p(amount = 0)
+  future_map(trip_sets_adj, ~{
   Sys.setenv(OMP_NUM_THREADS = 1)
   out <- MvGLMgllvm(.x)
   gc()
+  p()
   out
-}, .progress = TRUE, .options = furrr_options(seed = TRUE))
+}, .options = furrr_options(seed = TRUE))
+})
 
 res_gllvm  <- list_rbind(res_gllvm, names_to = "set")
 
 
 # MvGLM with GLLVM and 1 latent variables ---------------------------------
 
-res_gllvm_lv1 <- future_map(trip_sets_adj, ~{
+res_gllvm_lv1 <- with_progress({
+  p <- progressor(steps = length(trip_sets_adj))
+  p(amount = 0)
+  future_map(trip_sets_adj, ~{
   Sys.setenv(OMP_NUM_THREADS = 1)
   out <- MvGLMgllvm(.x, n_lv = 1)
   gc()
+  p()
   out
-}, .progress = TRUE, .options = furrr_options(seed = TRUE)) 
+}, .options = furrr_options(seed = TRUE)) 
+})
 
 res_gllvm_lv1  <- list_rbind(res_gllvm_lv1, names_to = "set") %>% 
   rename(p_gllvm1 = p_gllvm,
