@@ -56,7 +56,8 @@ res_fp <- res_comb_tbl %>%
     median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
     mvglm_sig = ifelse(p_mvobs < 0.05, 1, 0),
     gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
-    gllvm1_sig = ifelse(p_gllvm1< 0.05, 1, 0),
+    # dplyr version (strict and predictable)
+    gllvm1_sig = dplyr::if_else(p_gllvm1 < 0.05, 1, 0, missing = NA_real_), #gllvm1_sig = ifelse(p_gllvm1< 0.05, 1, 0),
     perma_sig = ifelse(perma_p < 0.05, 1, 0), # permanova
     glmm_sig = ifelse(p_glmm < 0.05, 1, 0),
     glmm1_sig = ifelse(p_glmm1 < 0.05, 1, 0)
@@ -92,12 +93,14 @@ set.seed(123) # Ensure reproducibility for the bootstrap
 n_bootstraps <- 1000
 
 fpr_plot <- map(1:n_bootstraps, ~{
-  slice_sample(res_fp, n = n_samples_per_level, by = test, replace = TRUE) %>%
+  res_fp %>%
+    filter(!is.na(sig)) %>% # Removes crashed models independently per test
+    slice_sample(n = n_samples_per_level, by = test, replace = TRUE) %>%
     mutate(boot = .x)
 }) %>%
   list_rbind() %>%
   group_by(boot, test) %>%
-  summarize(pctsig = mean(sig), .groups = "drop") %>%
+  summarize(pctsig = mean(sig, na.rm = TRUE), .groups = "drop") %>%
   ggplot(aes(x = test, y = pctsig)) + #fill was = test
   geom_violin(alpha = 0.5, fill = 'black', quantiles = c(0.25, 0.5, 0.75), 
               quantile.linetype = 1, quantile.color = "white") +
