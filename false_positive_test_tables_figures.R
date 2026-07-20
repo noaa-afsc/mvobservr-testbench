@@ -42,25 +42,32 @@ for(current_name in file_names) {
   })
 }
 
-#TODO - revert (decision - to the former bootstrap version of this figure - see false_positive_test_ccf5693.r)
+#So we have an extra copy here for set1_3k.  Remove it.
+Set1_3k <- res_comb_tbl |> filter(source_file == "alltests_falsepos_set_Set1_3k.Rdata")
+res_comb_tbl <- res_comb_tbl |> filter(source_file != "alltests_falsepos_set_Set1_3k.Rdata")
+
+#Lets take a quick look at our runtimes - these will identify which sets were run with furrr.
+res_comb_tbl |> group_by(source_file) |> summarize(M = mean(runtime_secs_gllvm1, na.rm = TRUE))
+#Sets 1 & 2 were run serially, other sets run with furrr and have longer model run times.  
+#This is important when we summarize model results.
 
 ## figure: boxplot for false positives ----
 res_fp <- res_comb_tbl %>%
   mutate(
     # Standard p-value threshold is < 0.05
-    t_test_sig = ifelse(tp < 0.05, 1, 0),
-    f_test_sig = ifelse(Fp < 0.05, 1, 0),
+    t_test_sig = ifelse(tp <= 0.05, 1, 0),
+    f_test_sig = ifelse(Fp <= 0.05, 1, 0),
     glm_mgcv_sig = ifelse(glm_mgcv_p <= 0.05, 1, 0), 
-    KS_test_sig = ifelse(KSp < 0.05, 1, 0),
-    permu_sig = ifelse(p_val < 0.05, 1, 0), # permutation
-    median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
-    mvglm_sig = ifelse(p_mvobs < 0.05, 1, 0),
-    gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
+    KS_test_sig = ifelse(KSp <= 0.05, 1, 0),
+    permu_sig = ifelse(p_val <= 0.05, 1, 0), # permutation
+    median_test_sig = ifelse(ci_lo >= 0 | ci_hi <= 0, 1, 0),
+    mvglm_sig = ifelse(p_mvobs <= 0.05, 1, 0),
+    gllvm_sig = ifelse(p_gllvm <= 0.05, 1, 0),
     # dplyr version (strict and predictable)
-    gllvm1_sig = dplyr::if_else(p_gllvm1 < 0.05, 1, 0, missing = NA_real_), #gllvm1_sig = ifelse(p_gllvm1< 0.05, 1, 0),
-    perma_sig = ifelse(perma_p < 0.05, 1, 0), # permanova
-    glmm_sig = ifelse(p_glmm < 0.05, 1, 0),
-    glmm1_sig = ifelse(p_glmm1 < 0.05, 1, 0)
+    gllvm1_sig = dplyr::if_else(p_gllvm1 <= 0.05, 1, 0, missing = NA_real_), #gllvm1_sig = ifelse(p_gllvm1< 0.05, 1, 0),
+    perma_sig = ifelse(perma_p <= 0.05, 1, 0), # permanova
+    glmm_sig = ifelse(p_glmm <= 0.05, 1, 0),
+    glmm1_sig = ifelse(p_glmm1 <= 0.05, 1, 0)
   ) %>%
   select(ends_with("sig")) %>%
   pivot_longer(
@@ -88,82 +95,82 @@ res_fp <- res_comb_tbl %>%
     test = fct_reorder(test, sig, .fun = mean, .na_rm = TRUE)
   )
 
+fpr_stats <- res_fp %>%
+  group_by(test) %>%
+  summarize(
+    total_runs = sum(!is.na(sig)),
+    false_positives = sum(sig, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Run an exact binomial test against the expected 0.05 rate
+    binom_res = map2(false_positives, total_runs, ~binom.test(x = .x, n = .y, p = 0.05, alt = "two.sided")),
+    # Extract the point estimate, p-value, and 95% CI into columns
+    tidied = map(binom_res, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  select(test, estimate, conf.low, conf.high, p.value)
+# For extracting tidy test results
+
 #Prep bootstrap figure.
 set.seed(123) # Ensure reproducibility for the bootstrap
 n_bootstraps <- 1000
 
-fpr_plot <- map(1:n_bootstraps, ~{
-  res_fp %>%
-    filter(!is.na(sig)) %>% # Removes crashed models independently per test
-    slice_sample(n = n_samples_per_level, by = test, replace = TRUE) %>%
-    mutate(boot = .x)
-}) %>%
-  list_rbind() %>%
-  group_by(boot, test) %>%
-  summarize(pctsig = mean(sig, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = test, y = pctsig)) + #fill was = test
-  geom_violin(alpha = 0.5, fill = 'black', quantiles = c(0.25, 0.5, 0.75), 
-              quantile.linetype = 1, quantile.color = "white") +
-  stat_summary(fun = "mean", geom = "point", size = 2, color = "white") +
+fpr_plot_dat <- map(1:n_bootstraps, ~{
+res_fp %>%
+     filter(!is.na(sig)) %>% # Removes crashed models independently per test
+     slice_sample(n = n_samples_per_level, by = test, replace = TRUE) %>%
+     mutate(boot = .x)
+ }) %>%
+   list_rbind() %>%
+   group_by(boot, test) %>%
+   summarize(pctsig = mean(sig, na.rm = TRUE), .groups = "drop")
+
+# Define the tests that should be white
+mv_tests <- c("glmm", "gllm1", "mvobservr", "gllvm", "gllvm1")
+
+fp_boot_fig <-
+ggplot(fpr_plot_dat, aes(x = test, y = pctsig)) +
+  geom_hline(yintercept = 0.05, linetype = 'solid', linewidth = 1, color = "red") +
+  geom_jitter(shape = 1, width = 0.1, alpha = 0.05) +
+  # Map a logical condition directly to the fill and use the updated quantiles syntax
+  geom_violin(aes(fill = test %in% mv_tests), alpha = 0.5, 
+              quantiles = c(0.25, 0.5, 0.75), quantile.linetype = 1) +
+  geom_point(data = fpr_stats, aes(y = estimate)) +
+  # Map TRUE to white, FALSE to dodgerblue
+  scale_fill_manual(values = c("FALSE" = "white", "TRUE" = "dodgerblue")) + 
   theme_classic() +
-  labs(
-    x = NULL,
-    y = "Percentage of Positive (Significant) Tests",
-    # title = "False Positive Rate of Tests on Total Biomass",
-    #subtitle = paste0(round(trip_coverage * 100, 0), "% coverage")
-  ) +
+  labs(x = NULL, y = "Percentage of Positive Tests") +
   scale_y_continuous(labels = scales::label_percent()) +
-  # Reference lines for standard alpha levels
-  geom_hline(yintercept = c(0.05), linetype = 'dashed', linewidth = 1) +
   theme(
     legend.position = "none",
-    
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
-fpr_plot
+fp_boot_fig 
 
 # Below is for making an exact binomial figure
-{## 1. Calculate Exact Binomial Confidence Intervals ----
-# fpr_stats <- res_fp %>%
-#   group_by(test) %>%
-#   summarize(
-#     total_runs = n(),
-#     false_positives = sum(sig, na.rm = TRUE),
-#     .groups = "drop"
-#   ) %>%
-#   mutate(
-#     # Run an exact binomial test against the expected 0.05 rate
-#     binom_res = map2(false_positives, total_runs, ~binom.test(x = .x, n = .y, p = 0.05)),
-#     # Extract the point estimate, p-value, and 95% CI into columns
-#     tidied = map(binom_res, tidy)
-#   ) %>%
-#   unnest(tidied) %>%
-#   select(test, estimate, conf.low, conf.high, p.value)
-#  # For extracting tidy test results
-# 
-# ## 2. Generate the Point-Range Plot ----
-# fpr_plot <- fpr_stats %>%
-#   # Order the tests from highest false positive rate to lowest for clean reading
-#   mutate(test = fct_reorder(test, estimate)) %>%
-#   ggplot(aes(y = test, x = estimate)) +
-#   
-#   # Add the error bars (95% CI) and the point estimate using the modern geom_errorbar
-#   geom_errorbar(aes(xmin = conf.low, xmax = conf.high), width = 0.2, linewidth = 0.8) +
-#   geom_point(size = 3, color = "black") +
-#   geom_vline(xintercept = 0.05, linetype = "dashed", color = "red", linewidth = 1) +
-#   
-#   theme_classic() +
-#   labs(y = NULL, x = "False Positive Rate (95% Confidence Interval)") +
-#   
-#   # Format x-axis as percentages
-#   scale_x_continuous(labels = scales::percent_format()) +
-#   
-#   theme(
-#     axis.text = element_text(size = 11, color = "black"),
-#     axis.title.x = element_text(margin = margin(t = 10))
-#   )
-# fpr_plot
-  }
+## 1. Calculate Exact Binomial Confidence Intervals ----
+
+## 2. Generate the Point-Range Plot ----  this is the results of a hypothesis test of "is the fp rate 0.05%?"
+ci_plot <- fpr_stats %>%
+  # Order the tests from highest false positive rate to lowest for clean reading
+  mutate(test = fct_reorder(test, estimate)) %>%
+  ggplot(aes(y = test, x = estimate)) +
+  # Add the error bars (95% CI) and the point estimate using the modern geom_errorbar
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), width = 0.2, linewidth = 0.8) +
+  geom_point(shape = 21, size = 3, color = "black", aes(fill = test %in% mv_tests)) +
+  scale_fill_manual(values = c("FALSE" = "white", "TRUE" = "dodgerblue")) +
+  geom_vline(xintercept = 0.05, linetype = "dashed", color = "red", linewidth = 1) +
+  theme_classic() +
+  labs(y = NULL, x = "False Positive Rate (95% Confidence Interval)") +
+  # Format x-axis as percentages
+  scale_x_continuous(labels = scales::percent_format()) +
+  theme(
+    axis.text = element_text(size = 11, color = "black"),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    legend.position = "none"
+  )
+ci_plot
 
 ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
        width = 5, height = 4, units = "in", dpi = 300) 
