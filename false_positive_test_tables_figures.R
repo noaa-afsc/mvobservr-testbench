@@ -148,6 +148,9 @@ ggplot(fpr_plot_dat, aes(x = test, y = pctsig)) +
   )
 fp_boot_fig 
 
+ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
+       width = 5, height = 4, units = "in", dpi = 300) 
+
 # Below is for making an exact binomial figure
 ## 1. Calculate Exact Binomial Confidence Intervals ----
 
@@ -172,7 +175,7 @@ ci_plot <- fpr_stats %>%
   )
 ci_plot
 
-ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
+ggsave("figures/ci_plot.png", plot = ci_plot, 
        width = 5, height = 4, units = "in", dpi = 300) 
 
 
