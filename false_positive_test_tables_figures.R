@@ -5,6 +5,7 @@ library(broom)
 library(gdrive)
 library(flextable)
 library(officer)
+library(ggbreak) 
 
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 
@@ -45,11 +46,6 @@ for(current_name in file_names) {
 #So we have an extra copy here for set1_3k.  Remove it.
 Set1_3k <- res_comb_tbl |> filter(source_file == "alltests_falsepos_set_Set1_3k.Rdata")
 res_comb_tbl <- res_comb_tbl |> filter(source_file != "alltests_falsepos_set_Set1_3k.Rdata")
-
-#Lets take a quick look at our runtimes - these will identify which sets were run with furrr.
-res_comb_tbl |> group_by(source_file) |> summarize(M = mean(runtime_secs_gllvm1, na.rm = TRUE))
-#Sets 1 & 2 were run serially, other sets run with furrr and have longer model run times.  
-#This is important when we summarize model results.
 
 ## figure: boxplot for false positives ----
 res_fp <- res_comb_tbl %>%
@@ -148,7 +144,7 @@ ggplot(fpr_plot_dat, aes(x = test, y = pctsig)) +
   )
 fp_boot_fig 
 
-ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
+ggsave("figures/false_positive_plot.png", plot = fp_boot_fig, 
        width = 5, height = 4, units = "in", dpi = 300) 
 
 # Below is for making an exact binomial figure
@@ -178,62 +174,80 @@ ci_plot
 ggsave("figures/ci_plot.png", plot = ci_plot, 
        width = 5, height = 4, units = "in", dpi = 300) 
 
+#Lets take a quick look at our runtimes - these will identify which sets were run with furrr.
+res_comb_tbl |> group_by(source_file) |> summarize(M = mean(runtime_secs_gllvm1, na.rm = TRUE))
+#Sets 1 & 2 were run serially, other sets run with furrr and have longer model run times.  
+#This is important when we summarize model results.
 
-## Make two summary tables of runtimes and power from Tweedie
-create_summary_table <- function(data, select_prefix, remove_pattern) {
-  data %>%
-    select(starts_with(select_prefix)) %>%
-    rename_with(~str_remove(., remove_pattern)) %>%
-    rename("mvobservr" = any_of("mvobs")) %>% 
-    pivot_longer(everything(), names_to = "Model", values_to = "value") %>%
-    group_by(Model) %>%
-    summarize(
-      Mean_num = mean(value, na.rm = TRUE),
-      SD       = sd(value, na.rm = TRUE),
-      N        = sum(!is.na(value)),
-      .groups  = "drop"
+create_mee_runtime_table <- function(res_comb_tbl, caption_text) {
+  table_data <- res_comb_tbl %>%
+    select(source_file, starts_with("runtime_secs_")) %>%
+    pivot_longer(
+      cols = starts_with("runtime_secs_"),
+      names_to = "raw_model",
+      values_to = "runtime",
+      values_drop_na = TRUE
     ) %>%
     mutate(
-      SE       = SD / sqrt(N),
-      Mean     = sprintf("%.2f", Mean_num),
-      ci_lower = sprintf("%.2f", Mean_num - (1.96 * SE)),
-      ci_upper = sprintf("%.2f", Mean_num + (1.96 * SE))
+      Cores = case_when(
+        str_detect(raw_model, "mvobs") ~ "multi core", 
+        source_file %in% c("alltests_falsepos_set_1.Rdata", "alltests_falsepos_set_2.Rdata") ~ "single core",
+        TRUE ~ "multi core"
+      ),
+      clean_model = str_remove(raw_model, "runtime_secs_"),
+      Latent_Status = if_else(str_ends(clean_model, "1"), "with latent variable", "no latent variable"),
+      Model = str_remove(clean_model, "1$"),
+      Model = if_else(Model == "mvobs", "mvobservr", Model) 
     ) %>%
-    select(Model, N, Mean, ci_lower, ci_upper) %>%
-    arrange(as.numeric(Mean))
-}
-
-# 2. MEE-compliant Flextable function
-make_mee_word_table <- function(df, caption_text, value_label) {
-  df %>%
-    mutate(Estimate = sprintf("%s (%s, %s)", Mean, ci_lower, ci_upper)) %>%
-    select(Model, N, !!sym(value_label) := Estimate) %>%
-    
+    group_by(Model, Latent_Status, Cores) %>%
+    summarize(
+      N = n(),
+      Mean_num = mean(runtime, na.rm = TRUE),
+      SD = sd(runtime, na.rm = TRUE),
+      .groups = "drop") %>%
+    mutate(
+      SE = SD / sqrt(N),
+      ci_lower = Mean_num - (1.96 * SE),
+      ci_upper = Mean_num + (1.96 * SE),
+      Estimate = sprintf("%.2f (%.2f, %.2f)", Mean_num, ci_lower, ci_upper)) %>%
+    select(Model, Latent_Status, Cores, Estimate) %>%
+    mutate(
+      Latent_Status = factor(Latent_Status, 
+                             levels = c("no latent variable", "with latent variable"),
+                             labels = c("No latent variable", "With latent variable")), # <-- Capitalizes here!
+      Cores = factor(Cores, 
+                     levels = c("single core", "multi core"),
+                     labels = c("Single core", "Multi core")), # <-- Capitalizes here!
+      Model = factor(Model, levels = c("glmm", "gllvm", "mvobservr"))
+    ) %>%
+    pivot_wider(
+      names_from = c(Latent_Status, Cores),
+      values_from = Estimate,
+      names_sep = "___",
+      values_fill = list(Estimate = "-") 
+    )
+  
+  # 2. Render the Flextable
+  table_data %>%
     flextable() %>%
-    # BES Styling Guidelines
+    separate_header(split = "___") %>%
     theme_booktabs() %>% 
     set_caption(caption = caption_text, align_with_table = TRUE) %>% 
     font(fontname = "Times New Roman", part = "all") %>%
     fontsize(size = 11, part = "all") %>%
     bold(part = "header") %>%
-    
-    # Text left-aligned, numbers/CIs centered
-    align(align = "left", j = "Model", part = "all") %>%
-    align(align = "center", j = c("N", value_label), part = "all") %>%
+    align(align = "left", j = 1, part = "all") %>%
+    align(align = "center", j = 2:ncol(table_data), part = "all") %>%
+    # Removed the set_header_labels line entirely since it is now natively correct
     autofit()
 }
 
-# 3. Generate DataFrames
-runtimes_df <- create_summary_table(res_comb_tbl, "runtime", "runtime_secs_")
-power_df    <- create_summary_table(res_comb_tbl, "pwr", "pwr_")
-
-# 4. Generate MEE-formatted Word Tables
-word_table1 <- runtimes_df %>% make_mee_word_table("Table 1. Computational runtimes for false positives.", "Mean runtime in seconds (95% CI)")
-word_table2 <- power_df    %>% make_mee_word_table("Table 2. Tweedie power statistics for false positives.", "Mean Tweedie power (95% CI)")
-
-# 5. Export directly to your MEE manuscript directory
-save_as_docx(
-  "Table 1" = word_table1, 
-  "Table 2" = word_table2, 
-  path = "output_data/MEE_manuscript_tables.docx"
+# Pass res_comb_tbl directly - no need to use runtimes_df at all!
+my_final_table <- create_mee_runtime_table(
+  res_comb_tbl = res_comb_tbl, 
+  caption_text = "Table 1: Mean model runtimes in seconds (95% CI). Runtimes were calculated across 2,000 iterations for single-core models and 1,000 iterations for multi-core models, with the exception of the mvobserver model (3,000 multi-core iterations). Due to non-convergence, the sample size for the gllvm model with a latent variable was reduced to N=1,903 (single-core) and N=948 (multi-core)."
 )
+
+# Save it to Word
+save_as_docx(my_final_table, path = "figures/Runtime_Table.docx")
+
