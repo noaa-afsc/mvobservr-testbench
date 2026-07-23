@@ -51,19 +51,19 @@ res_comb_tbl <- res_comb_tbl |> filter(source_file != "alltests_falsepos_set_Set
 res_fp <- res_comb_tbl %>%
   mutate(
     # Standard p-value threshold is < 0.05
-    t_test_sig = ifelse(tp <= 0.05, 1, 0),
-    f_test_sig = ifelse(Fp <= 0.05, 1, 0),
-    glm_mgcv_sig = ifelse(glm_mgcv_p <= 0.05, 1, 0), 
-    KS_test_sig = ifelse(KSp <= 0.05, 1, 0),
-    permu_sig = ifelse(p_val <= 0.05, 1, 0), # permutation
-    median_test_sig = ifelse(ci_lo >= 0 | ci_hi <= 0, 1, 0),
-    mvglm_sig = ifelse(p_mvobs <= 0.05, 1, 0),
-    gllvm_sig = ifelse(p_gllvm <= 0.05, 1, 0),
+    t_test_sig = ifelse(tp < 0.05, 1, 0),
+    f_test_sig = ifelse(Fp < 0.05, 1, 0),
+    glm_mgcv_sig = ifelse(glm_mgcv_p < 0.05, 1, 0), 
+    KS_test_sig = ifelse(KSp < 0.05, 1, 0),
+    permu_sig = ifelse(p_val < 0.05, 1, 0), # permutation
+    median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
+    mvglm_sig = ifelse(p_mvobs < 0.05, 1, 0),
+    gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
     # dplyr version (strict and predictable)
-    gllvm1_sig = dplyr::if_else(p_gllvm1 <= 0.05, 1, 0, missing = NA_real_), #gllvm1_sig = ifelse(p_gllvm1< 0.05, 1, 0),
-    perma_sig = ifelse(perma_p <= 0.05, 1, 0), # permanova
-    glmm_sig = ifelse(p_glmm <= 0.05, 1, 0),
-    glmm1_sig = ifelse(p_glmm1 <= 0.05, 1, 0)
+    gllvm1_sig = dplyr::if_else(p_gllvm1 < 0.05, 1, 0, missing = NA_real_), #gllvm1_sig = ifelse(p_gllvm1< 0.05, 1, 0),
+    perma_sig = ifelse(perma_p < 0.05, 1, 0), # permanova
+    glmm_sig = ifelse(p_glmm < 0.05, 1, 0),
+    glmm1_sig = ifelse(p_glmm1 < 0.05, 1, 0)
   ) %>%
   select(ends_with("sig")) %>%
   pivot_longer(
