@@ -115,7 +115,7 @@ n_bootstraps <- 1000
 fpr_plot_dat <- map(1:n_bootstraps, ~{
 res_fp %>%
      filter(!is.na(sig)) %>% # Removes crashed models independently per test
-     slice_sample(n = n_samples_per_level, by = test, replace = TRUE) %>%
+     slice_sample(n = nrow(res_comb_tbl), by = test, replace = TRUE) %>%
      mutate(boot = .x)
  }) %>%
    list_rbind() %>%
