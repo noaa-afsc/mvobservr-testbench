@@ -53,7 +53,18 @@ res_oe <- res_oe %>%
 
 table(res_oe$effsize, res_oe$bp_level)
 ```
+##Summarize delta between planned and acutal BPlevel
+```{r}
+# drift from target bp
+bp <- res_oe %>% mutate(diff_bp = abs(bp_true - bp_level), 
+                        pct_diff = 100*diff_bp, 
+                        rev = ifelse(sp2 > sp1, 1, 0))
+bp_mn <- bp %>% group_by(set, effsize) %>% summarize(M = mean(pct_diff))
+summary(bp_mn$M)
 
+#incidence of reversed bp
+sum(bp$rev/nrow(bp))*100
+```
 
 ##figure: relative power for mvglm and permanova vs dominance for 3 levels of bias
 ```{r eval = F}
