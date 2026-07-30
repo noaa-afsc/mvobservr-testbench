@@ -59,11 +59,11 @@ table(res_oe$effsize, res_oe$bp_level)
 bp <- res_oe %>% mutate(diff_bp = abs(bp_true - bp_level), 
                         pct_diff = 100*diff_bp, 
                         rev = ifelse(sp2 > sp1, 1, 0))
-bp_mn <- bp %>% group_by(set, effsize) %>% summarize(M = mean(pct_diff))
+bp_mn <- bp %>% group_by(set) %>% summarize(M = mean(pct_diff))
 summary(bp_mn$M)
 
 #incidence of reversed bp
-sum(bp$rev/nrow(bp))*100
+(sum(bp$rev)/nrow(bp))*100
 ```
 
 ##figure: relative power for mvglm and permanova vs dominance for 3 levels of bias
