@@ -21,7 +21,7 @@ output_name <- paste0("output_data/param_plot_set", set_number, ".Rdata")
 # Constants ----
 # Set how many populations per scenario to generate
 # There are 30 combinations, so 1 n_samples_per_level is 30 populations to test.
-n_samples_per_level <- 1 #3000 populations at 100, but takes 40 hours to run.  Dropping back to 50 for overnight runs.
+n_samples_per_level <- 50 #3000 populations at 100, but takes 40 hours to run.  Dropping back to 50 for overnight runs.
 
 # Set bias levels for species (change on observed trips; 0 = no bias, -0.25 = 25% reduction)
 bias <- c(0, -0.25)
@@ -273,6 +273,35 @@ perf_plot_dat <-
 
 pd <- position_dodge(width = 0.1) # Now 0.4 means "40% of the gap between points"
 
+#calculate pair-wise diffs between MvGLM models for each panel.
+pairwise_diffs <- perf_plot_dat %>% filter(Test != "PERMANOVA") %>%
+  select(param_mod, param_display_name, param_value, Test, psig, se) %>%
+  inner_join(., ., 
+             by = c("param_mod", "param_display_name", "param_value"), 
+             relationship = "many-to-many") %>%
+  filter(as.character(Test.x) < as.character(Test.y)) %>%
+  
+  # Group by the parameter and value BEFORE calculating the adjustment
+  # This ensures Bonferroni only corrects for the 3 tests within each group
+  group_by(param_mod, param_value) %>% 
+  
+  mutate(
+    comparison = paste(Test.x, "vs", Test.y),
+    z_stat = (psig.x - psig.y) / sqrt(se.x^2 + se.y^2),
+    p_value = 2 * pnorm(-abs(z_stat)),
+    
+    # Switch to Bonferroni here:
+    p_value_adj = p.adjust(p_value, method = "bonferroni"),
+    
+    is_significant = p_value_adj < 0.05
+  ) %>%
+  ungroup() %>% # Always ungroup when you're done!
+  
+  select(param_display_name, param_value, comparison, 
+         psig.x, psig.y, z_stat, p_value, p_value_adj, is_significant) %>%
+  arrange(param_display_name, param_value, comparison)
+
+#Make the plot
 perf_plot <- ggplot(perf_plot_dat, 
                     aes(x = factor(param_value), # Treat X as labels, not numbers
                         y = psig, 
