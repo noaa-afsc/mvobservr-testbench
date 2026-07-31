@@ -123,7 +123,7 @@ res_fp %>%
    summarize(pctsig = mean(sig, na.rm = TRUE), .groups = "drop")
 
 # Define the tests that should be white
-mv_tests <- c("glmm", "gllm1", "mvobservr", "gllvm", "gllvm1")
+mv_tests <- c("glmm", "glmm1", "mvobservr", "gllvm", "gllvm1")
 
 fp_boot_fig <-
 ggplot(fpr_plot_dat, aes(x = test, y = pctsig)) +
