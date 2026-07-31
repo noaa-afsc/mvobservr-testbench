@@ -191,8 +191,8 @@ create_mee_runtime_table <- function(res_comb_tbl, caption_text) {
     mutate(
       Cores = case_when(
         str_detect(raw_model, "mvobs") ~ "multi core", 
-        source_file %in% c("alltests_falsepos_set_1.Rdata", "alltests_falsepos_set_2.Rdata") ~ "single core",
-        TRUE ~ "multi core"
+        source_file %in% c("alltests_falsepos_set_1.Rdata", "alltests_falsepos_set_2.Rdata") ~ "multi core",
+        TRUE ~ "single core"
       ),
       clean_model = str_remove(raw_model, "runtime_secs_"),
       Latent_Status = if_else(str_ends(clean_model, "1"), "with latent variable", "no latent variable"),
