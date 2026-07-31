@@ -126,13 +126,13 @@ res_fp %>%
 mv_tests <- c("glmm", "glmm1", "mvobservr", "gllvm", "gllvm1")
 
 fp_boot_fig <-
-ggplot(fpr_plot_dat, aes(x = test, y = pctsig)) +
+ggplot(fpr_plot_dat %>% filter(!test %in% c("glmm1", "gllvm1")), aes(x = test, y = pctsig)) +
   geom_hline(yintercept = 0.05, linetype = 'solid', linewidth = 1, color = "red") +
   geom_jitter(shape = 1, width = 0.1, alpha = 0.05) +
   # Map a logical condition directly to the fill and use the updated quantiles syntax
   geom_violin(aes(fill = test %in% mv_tests), alpha = 0.5, 
               quantiles = c(0.25, 0.5, 0.75), quantile.linetype = 1) +
-  geom_point(data = fpr_stats, aes(y = estimate)) +
+  geom_point(data = fpr_stats %>% filter(!test %in% c("glmm1", "gllvm1")), aes(y = estimate)) +
   # Map TRUE to white, FALSE to dodgerblue
   scale_fill_manual(values = c("FALSE" = "white", "TRUE" = "dodgerblue")) + 
   theme_classic() +
