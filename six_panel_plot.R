@@ -301,6 +301,11 @@ pairwise_diffs <- perf_plot_dat %>% filter(Test != "PERMANOVA") %>%
          psig.x, psig.y, z_stat, p_value, p_value_adj, is_significant) %>%
   arrange(param_display_name, param_value, comparison)
 
+#Arrange the levels for proper plotting - population on left, tweedie on right
+perf_plot_dat$param_display_name <- factor(perf_plot_dat$param_display_name, levels = 
+                                             c("Number of Observed Trips (Out of 500 Total)", "Tweedie Mu Parameter (Mean)", 
+                                               "Total Trips", "Tweedie Phi Parameter (Dispersion)",
+                                               "Total Biomass (Log Scale)", "Tweedie Power Parameter (Poisson-Gamma)"))
 #Make the plot
 perf_plot <- ggplot(perf_plot_dat, 
                     aes(x = factor(param_value), # Treat X as labels, not numbers
