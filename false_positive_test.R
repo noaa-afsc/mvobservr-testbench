@@ -1,19 +1,30 @@
 # Packages and Functions ----
 library(tidyverse)
-library(gdrive)     # pak::pak("noaa-afsc/gdrive")
-library(mvobservr)  # pak::pak("noaa-afsc/mvobservr") instead.
+library(gdrive)       # pak::pak("noaa-afsc/gdrive")
+library(mvobservr)    # pak::pak("noaa-afsc/mvobservr")
 library(mgcv)         # for gam
+library(glmmTMB)
+library(gllvm)
 library(lme4)
 library(tweedie)
+library(future) #for parallel of gllvm and glmm
+library(furrr)  #as above
+library(progressr) #for custom progress bars
 
 source("functions/triplet_stats.R")
 source("functions/TripletAnalysis.R")
 source("functions/getDescriptiveStats.R")
 source("functions/runTandFtests.R")
 source("functions/runGLMM.R")
+source("functions/MvGLMglmm.R")
+source("functions/MvGLMgllvm.R")
 source("functions/assign_sig.R")
 source("functions/ObserverEffectStats.R")
 source("functions/perm_fxn.R")
+
+# Restrict TMB to a single thread to prevent GCP CPU thrashing
+TMB::openmp(n = 1, DLL = "gllvm")
+TMB::openmp(n = 1, DLL = "glmmTMB")
 
 #' `===================================================================================================================`
 
@@ -45,7 +56,7 @@ fixed_total_biomass <- 1000000
 # Vessel needs to be defined for some of the analyses
 nvess <- 1
 # Set how many populations per scenario to generate
-n_samples_per_level <- 500                                #' *Increased from 100 to 500*
+n_samples_per_level <- 500                         #' *Increased from 100 to 500*
 # Set the number of trips 
 ntrips <- 500
 # Set scalar for Tweedie distributions
@@ -55,7 +66,13 @@ mu_scalar <- 100
 
 # Generate Trip Populations ============================================================================================
 
-set.seed(123)
+set_number <- 3 # Set this
+
+# Generate Trip Populations ============================================================================================
+seed_max <- set_number*3
+seed_seq <- seq(seed_max - 2, seed_max, 1)
+seed_num <- as.numeric(paste(seed_seq, collapse = ""))
+set.seed(seed_num)
 
 trip_sets <- map(rep(1:length(target_bp_levels), n_samples_per_level), ~{
   # 1. Generate data until we have enough valid rows
@@ -140,12 +157,6 @@ if(!all(mapply(function(x, y) all(x$sp_2 == y$sp_2), x = trip_sets, y = trip_set
 res_t <- map(trip_sets_adj, ~runTandFtests(.x, "biomass_total"))
 res_t <- list_rbind(res_t, names_to = "set")
 
-res_t %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(tp < 0.05), mean(Fp < 0.05))
-
-
 ## Univariate Permutation ----------------------------------------------------------------------------------------------
 
 res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x, 
@@ -161,12 +172,6 @@ res_permute <- list_rbind(res_p_list, names_to = "set")
 res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
 res_g <- list_rbind(res_g, names_to = "set")
 
-res_g %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mn = mean(glm_mgcv_p<0.05, na.rm = TRUE), 
-            n_success_of_100 = sum(!is.na(glm_mgcv_p)))
-
 gc(verbose = FALSE)
 
 ## Triplet Analysis ----------------------------------------------------------------------------------------------------
@@ -174,10 +179,83 @@ gc(verbose = FALSE)
 res_tt <- map(trip_sets_adj, ~TripletAnalysis(.x, "biomass_total", bootstrap_reps = nperm), .progress = TRUE)
 res_tt <- list_rbind(res_tt, names_to = "set")
 
-res_tt %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(KSp < 0.05), mean(ci_lo > 0 | ci_hi < 0))
+# MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
+
+res_glmm <- trip_sets_adj %>% map(MvGLMglmm, lv = 0, .progress = TRUE)
+res_glmm  <- list_rbind(res_glmm, names_to = "set")
+
+# Setup parallel backend (run this before your model blocks)
+n_cores <- availableCores() - 2 
+plan(multisession, workers = n_cores)
+
+# Setup custom progress bars
+handlers(handler_progress(
+  format = "Running [:bar] :percent | Elapsed: :elapsed | ETA: :eta",
+  clear = FALSE
+))
+
+# MvGLM with glmTMB and lv ------------------------------------------------
+
+#only one latent variable bc we have two species and lv < df.
+res_glmm_lv1 <- with_progress({
+  # 1. Initialize the progressor with the total number of steps
+  p <- progressor(steps = length(trip_sets_adj))
+  p(amount = 0)
+  # 2. Run future_map (note: .progress = TRUE is removed)
+  future_map(trip_sets_adj, ~{
+    Sys.setenv(OMP_NUM_THREADS = 1)
+    out <- MvGLMglmm(.x, lv = 1)
+    gc()
+    # 3. Signal that a step has finished
+    p()
+    out
+  }, .options = furrr_options(seed = TRUE))
+})
+
+res_glmm_lv1  <- list_rbind(res_glmm_lv1, names_to = "set") %>% 
+  rename(p_glmm1 = p_glmm,
+         pwr_glmm1 = pwr_glmm,
+         runtime_secs_glmm1 = runtime_secs_glmm)
+
+
+# MvGLM with GLLVM --------------------------------------------------------
+
+res_gllvm <- with_progress({
+  p <- progressor(steps = length(trip_sets_adj))
+  p(amount = 0)
+  future_map(trip_sets_adj, ~{
+  Sys.setenv(OMP_NUM_THREADS = 1)
+  out <- MvGLMgllvm(.x)
+  gc()
+  p()
+  out
+}, .options = furrr_options(seed = TRUE))
+})
+
+res_gllvm  <- list_rbind(res_gllvm, names_to = "set")
+
+
+# MvGLM with GLLVM and 1 latent variables ---------------------------------
+
+res_gllvm_lv1 <- with_progress({
+  p <- progressor(steps = length(trip_sets_adj))
+  p(amount = 0)
+  future_map(trip_sets_adj, ~{
+  Sys.setenv(OMP_NUM_THREADS = 1)
+  out <- MvGLMgllvm(.x, n_lv = 1)
+  gc()
+  p()
+  out
+}, .options = furrr_options(seed = TRUE)) 
+})
+
+res_gllvm_lv1  <- list_rbind(res_gllvm_lv1, names_to = "set") %>% 
+  rename(p_gllvm1 = p_gllvm,
+         runtime_secs_gllvm1 = runtime_secs_gllvm,
+         pwr_gllvm1 = pwr_gllvm)
+
+# Clean up parallel workers and return R to normal sequential operation
+plan(sequential)
 
 ## Permanova -----------------------------------------------------------------------------------------------------------
 
@@ -185,55 +263,68 @@ adon_formula = "Y~factor(obs)"
 res_p <- map(trip_sets_adj, ~{
   Y <- .x %>% dplyr::select(starts_with("sp_"))
   adon <- vegan::adonis2(as.formula(adon_formula), data = .x, permutations = nperm, method="bray")
-  data.frame(metric = "biomass_total", perma_p = adon$`Pr(>F)`[1])
+  data.frame(perma_p = adon$`Pr(>F)`[1])
 }, .progress=TRUE) 
 res_p <- list_rbind(res_p, names_to = "set")
 
-res_p %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(perma_p<0.05))
-
 ## *Save all but mvglm --------------------------------------------------------------------------------------------------
 
-allbutmv_name <- paste0("output_data/allbutmv_falsepos.Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, file = allbutmv_name)
+allbutmv_name <- paste0("output_data/allbutmv_falsepos_set_", set_number, ".Rdata")
+save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_glmm, res_gllvm,
+     res_glmm_lv1, res_gllvm_lv1, file = allbutmv_name)
+
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
-## MVGLM ---------------------------------------------------------------------------------------------------------------
+## MvGLM permutation ---------------------------------------------------------------------------------------------------------------
+# mvobservr
 
-res_m <- imap(1:length(trip_sets_adj), ~{
-  print(paste0("***set ", .x, " ", now()))
-  trip_sets_adj[[.x]] %>%
-    mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
+res_m <- imap(trip_sets_adj, ~{
+  start_time <- Sys.time()
+  
+  # 1. Prepare data
+  processed_df <- .x %>%
+    mutate(observed = ifelse(obs == 1, 'Y', 'N')) %>%
     pivot_longer(cols = starts_with("sp_"),
-                 names_to = 'species', values_to = 'biomass') %>%
-    mvglm_obs(block = NULL, add_var = NULL, n_permutations = nperm, nCores = TRUE) %>%
-    pluck("results") %>%
-    {data.frame(t(c(uni.p = .$uni.p, biomass_total = .$p)))} %>%
-    pivot_longer(everything(), names_to = "metric", values_to = "mvglm_p") 
-})
-res_m <- list_rbind(res_m, names_to = "set") %>%
-  filter(metric == "biomass_total")
+                 names_to = 'species', values_to = 'biomass')
+  
+  # 2. Run model and capture output
+  capture.output(suppressMessages(
+    out <- mvglm_obs(processed_df, block = NULL, add_var = NULL, 
+                     n_permutations = nperm, nCores = parallel::detectCores()-2, 
+                     tweedie_profile_plot = FALSE)
+  ))
+  
+  elapsed_time <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+  
+  # 3. Build a clean, wide 1-row data frame directly from 'out'
+  data.frame(
+    p_mvobs    = out$results$p,
+    pwr_mvobs   = out$tweedie_profile$xi.max,
+    runtime_secs_mvobs = elapsed_time
+  )
+}, .progress = "Processing sets")
 
+# Combine all list elements into a single data frame
+res_m <- list_rbind(res_m, names_to = "set")
+
+# Now you can easily check your significance rate
 res_m %>% 
-  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
-  group_by(bp_level) %>% 
-  summarize(mean(mvglm_p<0.05))
+  summarize(mean(p_mvobs < 0.05))
 
 ## *Save and upload mvglm results --------------------------------------------------------------------------------------
 
-mvglm_name <- paste0("output_data/mvglmloop_falsepos.Rdata")
+mvglm_name <- paste0("output_data/mvglmloop_falsepos_set_", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
 gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
 
 #'`====================================================================================================================`
-
+gc()
 # Save Batch Results ===================================================================================================
-
-load(gdrive_download(mvglm_name, output_dribble))
-load(gdrive_download(allbutmv_name, output_dribble))
+# if(set_skip_prompt != F){
+# load(gdrive_download(mvglm_name, output_dribble))
+# load(gdrive_download(allbutmv_name, output_dribble))
+# }
 
 res_comb <- map(trip_sets_adj, ~{
   .x %>%
@@ -250,81 +341,15 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_tt, by = "set") %>%
   left_join(res_p, by = "set") %>%
   left_join(res_m, by = "set") %>%
+  left_join(res_glmm, by = "set") %>%
+  left_join(res_gllvm, by = "set") %>%
+  left_join(res_glmm_lv1, by = "set") %>%
+  left_join(res_gllvm_lv1, by = "set") %>%
   left_join(res_permute, by = "set")
 res_comb
 
-alltests_name <- paste0("output_data/alltests_falsepos.Rdata")
+alltests_name <- paste0("output_data/alltests_falsepos_set_", set_number, ".Rdata")
 save(res_comb, n_samples_per_level, file = alltests_name)
 gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)
 
-# Quickload ===================================================================================================
-# Must run lines 1-50 first!
-
-##figure: boxplot for false positives ----
-
-alltests_name <- paste0("output_data/alltests_falsepos.Rdata")
-output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
-(load(gdrive_download(alltests_name, output_dribble)))
-
-res_fp <- res_comb %>%
-  mutate(
-    # Standard p-value threshold is < 0.05
-    t_test_sig      = ifelse(tp < 0.05, 1, 0),
-    f_test_sig      = ifelse(Fp < 0.05, 1, 0),
-    permu_sig       = ifelse(p_val < 0.05, 1, 0),
-    # AIC logic: significant if converged AND delta AIC >= 2
-    dAIC_sig        = ifelse(glmconv == 1, ifelse(AICd >= 2, 1, 0), NA),
-    KS_test_sig     = ifelse(KSp < 0.05, 1, 0),
-    median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
-    mvglm_sig       = ifelse(mvglm_p < 0.05, 1, 0),
-    perma_sig       = ifelse(perma_p < 0.05, 1, 0)
-  ) %>%
-  select(ends_with("sig")) %>%
-  pivot_longer(
-    cols      = ends_with("sig"), 
-    names_to  = "test", 
-    values_to = "sig"
-  ) %>%
-  mutate(test = factor(
-    test, 
-    levels  = c("t_test_sig", "dAIC_sig", "f_test_sig", "permu_sig", "mvglm_sig",  
-                "KS_test_sig", "perma_sig", "median_test_sig"),
-    ordered = TRUE,
-    labels  = c("t-test", "GLM", "F test", "Permutation","MvGLM",  
-                "K-S test", "PERMANOVA", "Median")
-  ))
-
-set.seed(123) # Ensure reproducibility for the bootstrap
-n_bootstraps <- 1000
-
-fpr_plot <- map(1:n_bootstraps, ~{
-  slice_sample(res_fp, n = n_samples_per_level, by = test, replace = TRUE) %>%
-    mutate(boot = .x)
-}) %>%
-  list_rbind() %>%
-  group_by(boot, test) %>%
-  # Use na.rm = TRUE because dAIC_sig contains NAs for non-convergence
-  summarize(pctsig = mean(sig, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = test, y = pctsig)) + #fill was = test
-  geom_violin(alpha = 0.5, fill = 'black', quantiles = c(0.25, 0.5, 0.75), 
-              quantile.linetype = 1, quantile.color = "white") +
-  stat_summary(fun = "mean", geom = "point", size = 2, color = "white") +
-  theme_classic() +
-  labs(
-    x = NULL,
-    y = "Percentage of Positive (Significant) Tests",
-   # title = "False Positive Rate of Tests on Total Biomass",
-    subtitle = paste0(round(trip_coverage * 100, 0), "% coverage")
-  ) +
-  scale_y_continuous(labels = scales::label_percent()) +
-  # Reference lines for standard alpha levels
-  geom_hline(yintercept = c(0.05), linetype = 'dashed', size = 1) +
-  theme(
-    legend.position = "none",
-    
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
-fpr_plot
-
-ggsave("figures/false_positive_plot.png", plot = fpr_plot, 
-       width = 5, height = 4, units = "in", dpi = 300) 
+# go to false_positive_test_tables_figures.r
