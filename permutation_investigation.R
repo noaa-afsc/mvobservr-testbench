@@ -112,5 +112,7 @@ pvals_by_perm  %>%
   ggplot(aes(x=nperm, y=pval)) +
   geom_point(alpha = 0.2) +
   geom_smooth() + 
-  scale_x_log10()
+  scale_x_log10() + 
+  theme_bw() + 
+  labs(x="# of permutations", y="p-values")
 
