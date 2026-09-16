@@ -5,10 +5,12 @@ library(tidyr)
 library(ggplot2)
 library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
-mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
 library(tweedie)
 library(progressr)
 
+mvobservr_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
+
+set_skip_prompt <- T
 
 #setup parameters
 bias <- c(0, -0.25) #-0.25, -0.10, -0.40
@@ -103,46 +105,40 @@ make_trips <- function() {
 # gemini
 # loop over different permutation sizes
 
-# Define permutations (removed 5 and 50 to avoid nperm < cores error)
-perm_levels <- rep(c(30, 50, 100, 500, 1000, 5000), each = 100)
-
-# Loop over different permutation sizes with custom ETA progress bar
-pvals_by_perm <- map(perm_levels, ~{
-  
-  # 1. Generate data for this specific iteration
+perm_levels <- rep(c(15, 30, 50, 100, 500, 1000, 5000), each = 100)# Define permutations (avoid nperm < cores error)
+perm_levels_shuffled <- sample(perm_levels)# SHUFFLE the order randomly
+pvals_by_perm <- map(perm_levels_shuffled, ~{# Feed the shuffled vector into map
+#Run model 
   df <- make_trips()
-  
-  # 2. Format data and run the model with internal parallelization
-  res <- df %>%
+  df_formatted <- df %>%
     mutate(observed = ifelse(obs == 1, 'Y', 'N')) %>%
     pivot_longer(cols = starts_with("sp_"),
-                 names_to = 'species', values_to = 'biomass') %>%
-    mvglm_obs(block = NULL, add_var = NULL, n_permutations = .x, nCores = TRUE) %>%
-    pluck("results") %>%
-    { data.frame(nperm = .x, pval = .$p) } 
-  
-  # 3. Force garbage collection to clean up parallel connections
-  gc()
-  
+                 names_to = 'species', values_to = 'biomass')
+#run silently 
+  capture.output({
+    suppressMessages({
+      model_out <- mvglm_obs(df_formatted, block = NULL, add_var = NULL, n_permutations = .x, nCores = parallel::detectCores()-2)})
+  })
+  res <- data.frame(nperm = .x, pval = model_out$results$p)
+  gc(verbose = FALSE) 
   return(res)
-  
-}, 
-# Explicitly format the progress bar to calculate and display the ETA
+}, #add custom progress bar
 .progress = list(
   name = "Running Models",
   format = "{cli::pb_name} {cli::pb_bar} {cli::pb_current}/{cli::pb_total} | ETA: {cli::pb_eta}"
-)) %>% 
-  list_rbind()
-
+)) %>% #put it all together
+  list_rbind() %>% 
+  arrange(nperm) #Sort the final dataframe back in order!
 
 
 #save data to gdrive
-save(pvals_by_perm, file="output_data/pvals_by_perm.Rdat")
-gdrive_upload(local_path = "output_data/pvals_by_perm.Rdat", gdrive_dribble = mvobservr_dribble)
+save(pvals_by_perm, file="output_data/SUPPL_pvals_by_perm.Rdat")
 
+gdrive_upload(local_path = "output_data/SUPPL_pvals_by_perm.Rdat", 
+              gdrive_dribble = mvobservr_dribble, 
+              skip_prompt = set_skip_prompt)
 
-
-#load & plot
+# Quick load and plot -----------------------------------------------------
 load(gdrive_download(local_path = "output_data/pvals_by_perm.Rdat", gdrive_dribble = mvobservr_dribble))
 
 pvals_by_perm  %>%
