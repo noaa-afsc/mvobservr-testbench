@@ -1,4 +1,5 @@
 library(dplyr)
+library(furrr)
 library(purrr)
 library(tidyr)
 library(ggplot2)
@@ -6,6 +7,7 @@ library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
 library(tweedie)
+library(progressr)
 
 
 #setup parameters
@@ -87,16 +89,51 @@ make_trips <- function() {
 
 
 #loop over different permutation sizes
-pvals_by_perm <- map(rep(c(5, 50, 100, 500, 1000), each=50), ~{
-    make_trips() %>%
-    mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
+# pvals_by_perm <- map(rep(c(5, 50, 100, 500, 1000), each=50), ~{
+#     make_trips(), .progress = TRUE) %>%
+#     mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
+#     pivot_longer(cols = starts_with("sp_"),
+#                  names_to = 'species', values_to = 'biomass') %>%
+#     mvglm_obs(block = NULL, add_var = NULL, n_permutations = .x, nCores = T) %>%
+#     pluck("results") %>%
+#     {data.frame(nperm = .x, pval = .$p)} 
+# }, .progress=TRUE) %>%
+#   list_rbind()
+
+# gemini
+# loop over different permutation sizes
+
+# Define permutations (removed 5 and 50 to avoid nperm < cores error)
+perm_levels <- rep(c(30, 50, 100, 500, 1000, 5000), each = 100)
+
+# Loop over different permutation sizes with custom ETA progress bar
+pvals_by_perm <- map(perm_levels, ~{
+  
+  # 1. Generate data for this specific iteration
+  df <- make_trips()
+  
+  # 2. Format data and run the model with internal parallelization
+  res <- df %>%
+    mutate(observed = ifelse(obs == 1, 'Y', 'N')) %>%
     pivot_longer(cols = starts_with("sp_"),
                  names_to = 'species', values_to = 'biomass') %>%
-    mvglm_obs(block = NULL, add_var = NULL, n_permutations = .x, nCores = T) %>%
+    mvglm_obs(block = NULL, add_var = NULL, n_permutations = .x, nCores = TRUE) %>%
     pluck("results") %>%
-    {data.frame(nperm = .x, pval = .$p)} 
-}, .progress=TRUE) %>%
+    { data.frame(nperm = .x, pval = .$p) } 
+  
+  # 3. Force garbage collection to clean up parallel connections
+  gc()
+  
+  return(res)
+  
+}, 
+# Explicitly format the progress bar to calculate and display the ETA
+.progress = list(
+  name = "Running Models",
+  format = "{cli::pb_name} {cli::pb_bar} {cli::pb_current}/{cli::pb_total} | ETA: {cli::pb_eta}"
+)) %>% 
   list_rbind()
+
 
 
 #save data to gdrive
