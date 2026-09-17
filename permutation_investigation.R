@@ -139,13 +139,25 @@ gdrive_upload(local_path = "output_data/SUPPL_pvals_by_perm.Rdat",
               skip_prompt = set_skip_prompt)
 
 # Quick load and plot -----------------------------------------------------
-load(gdrive_download(local_path = "output_data/pvals_by_perm.Rdat", gdrive_dribble = mvobservr_dribble))
+load(gdrive_download(local_path = "output_data/SUPPL_pvals_by_perm.Rdat", gdrive_dribble = mvobservr_dribble))
 
-pvals_by_perm  %>%
-  ggplot(aes(x=nperm, y=pval)) +
-  geom_point(alpha = 0.2) +
-  geom_smooth() + 
-  scale_x_log10() + 
+suppl_fig_pval <-
+  pvals_by_perm  %>%
+  ggplot(aes(x=nperm, y=pval, group = nperm)) +  
+ # geom_violin() +
+  geom_boxplot(fill = "grey", color = "black", outlier.shape = NA) +
+  geom_point(alpha = 0.5, pch = 21) +
+ # geom_hline(yintercept = 0.01) +
+  stat_summary(fun = "median", geom = "point", color = "black", fill = "red", size = 3, pch = 21) +
+ #scale_x_log10() + 
+  geom_hline(yintercept = 0.001) +
   theme_bw() + 
-  labs(x="# of permutations", y="p-values")
+  scale_y_continuous(limits = c(0, 0.1)) +
+  labs(x="Number of permutations", y="p-values")
+suppl_fig_pval
 
+save(pvals_by_perm, suppl_fig_pval, file="output_data/SUPPL_pvals_by_perm.Rdat")
+
+gdrive_upload(local_path = "output_data/SUPPL_pvals_by_perm.Rdat", 
+              gdrive_dribble = mvobservr_dribble, 
+              skip_prompt = set_skip_prompt)
