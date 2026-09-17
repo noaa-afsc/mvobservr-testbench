@@ -12,6 +12,7 @@ library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
 library(mgcv) #univariate glm
 library(glmmTMB) #MvGLM   
 library(lme4)
+library(gllvm)
 library(tweedie)
 
 source("functions/triplet_stats.R")
@@ -19,6 +20,8 @@ source("functions/TripletAnalysis.R")
 source("functions/getDescriptiveStats.R")
 source("functions/runTandFtests.R")
 source("functions/runGLMM.R")
+source("functions/MvGLMglmm.R")
+source("functions/MvGLMgllvm.R")
 source("functions/assign_sig.R")
 source("functions/ObserverEffectStats.R")
 source("functions/perm_fxn.R")
@@ -184,6 +187,11 @@ res_p_list <- map(trip_sets_adj, ~perm_fxn(data = .x,
 # Combine results into a 500-row table
 res_permute <- list_rbind(res_p_list, names_to = "set")
 
+res_permute %>% 
+  mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mn = mean(p_val<0.05, na.rm = TRUE))
+
 ## Univariate GLM -----------------------------------------------------------------------------------------------------
 
 res_g <- map(trip_sets_adj, ~ suppressMessages(runGLMM(.x, "biomass_total")), .progress = TRUE)
@@ -222,10 +230,29 @@ res_p %>%
   group_by(bp_level) %>% 
   summarize(mean(perma_p<0.05))
 
+# MvGLM with glmmTMB ---------------------------------------------------------------------------------------------------
+
+res_glmm <- trip_sets_adj %>% map(MvGLMglmm, lv = 0, .progress = TRUE) %>% 
+  list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
+
+res_glmm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(p_glmm < 0.05))
+
+# MvGLM with GLLVM ----------------------------------------------------------------------------------------------------------------
+
+res_gllvm <- map(trip_sets_adj, MvGLMgllvm, .progress = TRUE) %>% 
+  list_rbind(names_to = "set") %>% mutate(metric = "biomass_total")
+
+res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>% 
+  group_by(bp_level) %>% 
+  summarize(mean(p_gllvm < 0.05))
+
 ## *Save all but MvGLMperm --------------------------------------------------------------------------------------------------
 
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
-save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, file = allbutmv_name)
+save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, 
+     res_tt, res_glmm, res_gllvm, file = allbutmv_name)
 # Upload to the Google Shared Drive
 gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
@@ -250,7 +277,7 @@ res_m %>%
   group_by(bp_level) %>% 
   summarize(mean(mvglm_p<0.05))
 
-## *Save and upload mvglm results --------------------------------------------------------------------------------------
+## *Save and upload mvobservr results --------------------------------------------------------------------------------------
 
 mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
@@ -259,9 +286,10 @@ gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
 #'`====================================================================================================================`
 
 # Save Batch Results ===================================================================================================
-
-load(gdrive_download(mvglm_name, output_dribble))
-load(gdrive_download(allbutmv_name, output_dribble))
+if(set_skip_prompt != F){
+  load(gdrive_download(mvglm_name, output_dribble))
+  load(gdrive_download(allbutmv_name, output_dribble))
+}
 
 res_comb <- map(trip_sets_adj, ~{
   .x %>%
@@ -273,6 +301,8 @@ res_comb <- map(trip_sets_adj, ~{
   left_join(res_tt, by = "set") %>%
   left_join(res_p, by = "set") %>%
   left_join(res_m, by = "set") %>%
+  left_join(res_glmm , by = "set") %>%
+  left_join(res_gllvm , by = "set") %>%
   left_join(res_permute, by = "set")
 res_comb
 
