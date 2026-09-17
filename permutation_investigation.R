@@ -10,6 +10,8 @@ library(progressr)
 
 mvobservr_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 
+set.seed(123) 
+
 set_skip_prompt <- T
 
 #setup parameters
@@ -89,23 +91,9 @@ make_trips <- function() {
   return(catches)
 }
 
-
-#loop over different permutation sizes
-# pvals_by_perm <- map(rep(c(5, 50, 100, 500, 1000), each=50), ~{
-#     make_trips(), .progress = TRUE) %>%
-#     mutate(observed = ifelse(obs==1, 'Y', 'N')) %>%
-#     pivot_longer(cols = starts_with("sp_"),
-#                  names_to = 'species', values_to = 'biomass') %>%
-#     mvglm_obs(block = NULL, add_var = NULL, n_permutations = .x, nCores = T) %>%
-#     pluck("results") %>%
-#     {data.frame(nperm = .x, pval = .$p)} 
-# }, .progress=TRUE) %>%
-#   list_rbind()
-
-# gemini
 # loop over different permutation sizes
 
-perm_levels <- rep(c(15, 30, 50, 100, 500, 1000, 5000), each = 100)# Define permutations (avoid nperm < cores error)
+perm_levels <- rep(c(15, 30, 50, 100, 250, 500, 1000, 2500, 5000), each = 100)# Define permutations (avoid nperm < cores error)
 perm_levels_shuffled <- sample(perm_levels)# SHUFFLE the order randomly
 pvals_by_perm <- map(perm_levels_shuffled, ~{# Feed the shuffled vector into map
 #Run model 
@@ -134,12 +122,12 @@ pvals_by_perm <- map(perm_levels_shuffled, ~{# Feed the shuffled vector into map
 #save data to gdrive
 save(pvals_by_perm, file="output_data/SUPPL_pvals_by_perm.Rdat")
 
-gdrive_upload(local_path = "output_data/SUPPL_pvals_by_perm.Rdat", 
-              gdrive_dribble = mvobservr_dribble, 
+gdrive_upload(local_path = "output_data/SUPPL_pvals_by_perm.Rdat",
+              gdrive_dribble = mvobservr_dribble,
               skip_prompt = set_skip_prompt)
 
-# Quick load and plot -----------------------------------------------------
-load(gdrive_download(local_path = "output_data/SUPPL_pvals_by_perm.Rdat", gdrive_dribble = mvobservr_dribble))
+# # Quick load and plot -----------------------------------------------------
+ load(gdrive_download(local_path = "output_data/SUPPL_pvals_by_perm.Rdat", gdrive_dribble = mvobservr_dribble))
 
 suppl_fig_pval <-
   pvals_by_perm  %>%
