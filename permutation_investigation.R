@@ -133,12 +133,13 @@ suppl_fig_pval <-
   pvals_by_perm  %>%
   ggplot(aes(x=nperm, y=pval, group = nperm)) +  
  # geom_violin() +
-  geom_boxplot(fill = "grey", color = "black", outlier.shape = NA) +
+  geom_boxplot(fill = "grey", color = "black", outlier.shape = NA, width = .9) +
   geom_point(alpha = 0.5, pch = 21) +
  # geom_hline(yintercept = 0.01) +
   stat_summary(fun = "median", geom = "point", color = "black", fill = "red", size = 3, pch = 21) +
  #scale_x_log10() + 
-  geom_hline(yintercept = 0.001) +
+  geom_hline(yintercept = 0.01, lty = 2) +
+  geom_hline(yintercept = 0.001, lty = 1) +
   theme_bw() + 
   scale_y_continuous(limits = c(0, 0.1)) +
   labs(x="Number of permutations", y="p-values")
