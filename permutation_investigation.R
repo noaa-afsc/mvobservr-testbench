@@ -133,7 +133,7 @@ suppl_fig_pval <-
   pvals_by_perm  %>%
   ggplot(aes(x=nperm, y=pval, group = nperm)) +  
  # geom_violin() +
-  geom_boxplot(fill = "grey", color = "black", outlier.shape = NA, width = .9) +
+  geom_boxplot(fill = "grey", color = "black", outlier.shape = NA) +
   geom_point(alpha = 0.5, pch = 21) +
  # geom_hline(yintercept = 0.01) +
   stat_summary(fun = "median", geom = "point", color = "black", fill = "red", size = 3, pch = 21) +
