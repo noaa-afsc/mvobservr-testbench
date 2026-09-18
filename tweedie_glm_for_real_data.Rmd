@@ -167,13 +167,6 @@ for (i in 1:nrow(ne_strat_summary)) {
 }
 ```
 
-
-
-
-
-
-
-
 # combined
 ```{r}
 strat_summary_comb <- ak_strat_summary %>% mutate(region="AK") %>%
@@ -221,10 +214,14 @@ strat_summary_comb %>%
 ```
 
 
+```{r}
+#quickload
+load("~/mvobservr-testbench/output_data/strat_summary_combined.Rdata")
+```
 
 ```{r}
+library(stringr)
 strat_summary_comb %>%
-  #mutate(gear = str_split_i(strat, " ", 2)) %>%
   mutate(gear = case_when(
     region == "AK" ~ str_split_i(strat, " ", 2),
     region == "NE" ~ strat
@@ -240,10 +237,29 @@ strat_summary_comb %>%
     str_like(gear, "%PU%") ~ "MOBILE",
     TRUE ~ gear
   )) %>%
-  ggplot(aes(x=p_est, y=phi_est, size=mu_est, col=region)) +
-  geom_point(alpha = 0.5) +
-  geom_point(x=1.6, y=3, size=5.5, col='black', shape=21) +
-  facet_wrap(~geartype)
+  filter(geartype == "MOBILE") %>% 
+  ggplot(aes(x = p_est, y = phi_est, size = mu_est, col = region)) +
+  geom_point(alpha = 0.6) +
+  geom_point(x = 1.6, y = 3, size = 5.5, col = 'black', shape = 21, stroke = 1) +
+  
+  # Add labs() to control all axis and legend titles
+  labs(
+    #title = "Parameter Estimates for Mobile Gear Types",
+    x = "Power Parameter (p estimate)", 
+    y = expression(paste("Dispersion (", phi, " estimate)")), # Uses mathematical phi symbol
+    size = Base~Mean~"("*mu*")",                              # Formats nicely in the legend
+    col = "Management Region"
+  ) +
+  
+  # Apply a cleaner theme
+  theme_bw(base_size = 14) +
+  theme(
+    #plot.title = element_text(face = "bold", margin = margin(b = 15)),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    legend.position = "right"
+  )
+ # facet_wrap(~geartype)
 ```
 
 
