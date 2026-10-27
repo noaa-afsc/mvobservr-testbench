@@ -7,7 +7,6 @@
 
 # Packages and Functions ----
 library(tidyverse)
-library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
 library(mgcv) #univariate glm
 library(glmmTMB) #MvGLM   
@@ -15,26 +14,20 @@ library(lme4)
 library(gllvm)
 library(tweedie)
 
-source("functions/triplet_stats.R")
-source("functions/TripletAnalysis.R")
-source("functions/getDescriptiveStats.R")
+
 source("functions/runTandFtests.R")
+source("functions/perm_fxn.R")
 source("functions/runGLMM.R")
+source("functions/TripletAnalysis.R")
+source("functions/triplet_stats.R")
 source("functions/MvGLMglmm.R")
 source("functions/MvGLMgllvm.R")
-source("functions/assign_sig.R")
-source("functions/ObserverEffectStats.R")
-source("functions/perm_fxn.R")
+
 
 #' `===================================================================================================================`
 
-#' *Set whether to automatically upload to the Gdrive. Manually change to 'TRUE' when performing full runs!*
-set_skip_prompt <- F
 
 # Parameter Setup ----
-
-#' Set the destination folder for data outputs on the Google shared drive
-output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 
 ## Batch Setup ----
 
@@ -253,8 +246,6 @@ res_gllvm %>% mutate(bp_level = rep(target_bp_levels, n_samples_per_level)) %>%
 allbutmv_name <- paste0("output_data/allbutmv_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, 
      res_tt, res_glmm, res_gllvm, file = allbutmv_name)
-# Upload to the Google Shared Drive
-gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
 ## MVGLMperm ---------------------------------------------------------------------------------------------------------------
 
@@ -281,15 +272,10 @@ res_m %>%
 
 mvglm_name <- paste0("output_data/mvglmloop_b", max(abs(bias))*100, "_set", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
-gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
 
 #'`====================================================================================================================`
 
 # Save Batch Results ===================================================================================================
-if(set_skip_prompt != F){
-  load(gdrive_download(mvglm_name, output_dribble))
-  load(gdrive_download(allbutmv_name, output_dribble))
-}
 
 res_comb <- map(trip_sets_adj, ~{
   .x %>%
@@ -310,4 +296,3 @@ alltests_name <- paste0(
   "output_data/alltests_2spp_oe", max(abs(bias))*100, "_cov", trip_coverage*100, "_set", set_number, ".Rdata"
 )
 save(res_comb, file = alltests_name)
-gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)

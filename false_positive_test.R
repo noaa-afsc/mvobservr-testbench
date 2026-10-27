@@ -1,6 +1,5 @@
 # Packages and Functions ----
 library(tidyverse)
-library(gdrive)       # pak::pak("noaa-afsc/gdrive")
 library(mvobservr)    # pak::pak("noaa-afsc/mvobservr")
 library(mgcv)         # for gam
 library(glmmTMB)
@@ -11,16 +10,14 @@ library(future) #for parallel of gllvm and glmm
 library(furrr)  #as above
 library(progressr) #for custom progress bars
 
+
+source("functions/runTandFtests.R")
+source("functions/perm_fxn.R")
+source("functions/runGLMM.R")
 source("functions/triplet_stats.R")
 source("functions/TripletAnalysis.R")
-source("functions/getDescriptiveStats.R")
-source("functions/runTandFtests.R")
-source("functions/runGLMM.R")
 source("functions/MvGLMglmm.R")
 source("functions/MvGLMgllvm.R")
-source("functions/assign_sig.R")
-source("functions/ObserverEffectStats.R")
-source("functions/perm_fxn.R")
 
 # Restrict TMB to a single thread to prevent GCP CPU thrashing
 TMB::openmp(n = 1, DLL = "gllvm")
@@ -28,11 +25,6 @@ TMB::openmp(n = 1, DLL = "glmmTMB")
 
 #' `===================================================================================================================`
 
-#' *Set whether to automatically upload to the Gdrive. Manually change to 'TRUE' when performing full runs!*
-set_skip_prompt <- T
-
-#' Set the destination folder for data outputs on the Google shared drive
-output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 
 ## Test Parameters ----
 
@@ -273,8 +265,6 @@ allbutmv_name <- paste0("output_data/allbutmv_falsepos_set_", set_number, ".Rdat
 save(trip_sets, trip_sets_adj, res_g, res_p, res_permute, res_t, res_tt, res_glmm, res_gllvm,
      res_glmm_lv1, res_gllvm_lv1, file = allbutmv_name)
 
-# Upload to the Google Shared Drive
-gdrive_upload(allbutmv_name, output_dribble, skip_prompt = set_skip_prompt)
 
 ## MvGLM permutation ---------------------------------------------------------------------------------------------------------------
 # mvobservr
@@ -291,8 +281,7 @@ res_m <- imap(trip_sets_adj, ~{
   # 2. Run model and capture output
   capture.output(suppressMessages(
     out <- mvglm_obs(processed_df, block = NULL, add_var = NULL, 
-                     n_permutations = nperm, nCores = parallel::detectCores()-2, 
-                     tweedie_profile_plot = FALSE)
+                     n_permutations = nperm, nCores = parallel::detectCores()-2)
   ))
   
   elapsed_time <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
@@ -316,15 +305,10 @@ res_m %>%
 
 mvglm_name <- paste0("output_data/mvglmloop_falsepos_set_", set_number, ".Rdata")
 save(res_m, file = mvglm_name)
-gdrive_upload(mvglm_name, output_dribble, skip_prompt = set_skip_prompt)
+
 
 #'`====================================================================================================================`
 gc()
-# Save Batch Results ===================================================================================================
-# if(set_skip_prompt != F){
-# load(gdrive_download(mvglm_name, output_dribble))
-# load(gdrive_download(allbutmv_name, output_dribble))
-# }
 
 res_comb <- map(trip_sets_adj, ~{
   .x %>%
@@ -350,6 +334,6 @@ res_comb
 
 alltests_name <- paste0("output_data/alltests_falsepos_set_", set_number, ".Rdata")
 save(res_comb, n_samples_per_level, file = alltests_name)
-gdrive_upload(alltests_name, output_dribble, skip_prompt = set_skip_prompt)
+
 
 # go to false_positive_test_tables_figures.r

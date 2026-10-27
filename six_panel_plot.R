@@ -7,11 +7,8 @@ source("functions/MvGLMglmm.R")
 library(gllvm)
 source("functions/MvGLMgllvm.R")
 library(vegan)
-library(gdrive) # pak::pak("noaa-afsc/gdrive")
-library(mvobservr) # # pak::pak("noaa-afsc/mvobservr")
+library(mvobservr) # devtools::install_github("noaa-afsc/mvobservr")
 
-
-set_skip_prompt <- T  #for cloud
 
 # for reproducibility
 set_number <- 90 # Set this
@@ -197,36 +194,28 @@ res_comb <- map(trip_sets_adj, ~ .x[1, c("param_mod", "param_value")]) %>%
   left_join(res_glmm, by=c("set","metric")) %>%
   left_join(res_gllvm, by=c("set","metric")) %>%
   left_join(res_m, by=c("set","metric"))
-res_comb
+#res_comb
 
 save(res_comb, file = output_name)
 
-#upload files to gdrive only once when transferring from data ran on cloud workstation
-mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
-gdrive_upload(local_path = output_name, 
-              gdrive_dribble = mvobservr_dribble, 
-              skip_prompt = set_skip_prompt)
+# Quick load and figure generation ------------------------------------------------------
 
-# Quick pulldown and figure generation ------------------------------------------------------
-mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
-
-#list all files in google drive folder that match your naming pattern
-# The 'pattern' argument acts as a search filter
-drive_files <- gdrive_ls(mvobservr_dribble)
-drive_files <- drive_files %>% filter(grepl(pattern = "^param_plot_set", x = name))
-
-file_names <- drive_files$name
+#list all files in folder that match your naming pattern
+# Define the local directory and list matching files
+local_dir <- "output_data"
+file_names <- list.files(path = local_dir, pattern = "^param_plot_set")
 
 # Initialize our empty master dataframe
 res_comb_tbl <- tibble()
 
-# 4. Loop over the EXACT file names we just pulled from the cloud
+# 4. Loop over the EXACT file names we just pulled from the folder
 for(current_name in file_names) {
-  # Reconstruct the path exactly how your gdrive_download function expects it
-  current_file <- paste0("output_data/", current_name)
-  cat("Downloading and processing:", current_file, "\n")
+  # Reconstruct the path
+  current_file <- file.path(local_dir, current_name)
+  cat("Loading and processing:", current_file, "\n")
+  
   tryCatch({
-    load(gdrive_download(local_path = current_file, gdrive_dribble = mvobservr_dribble))
+    load(current_file)
     if(nrow(res_comb_tbl) == 0) {
       # For the very first file, assign it and add a tracking column
       res_comb_tbl <- res_comb |> 

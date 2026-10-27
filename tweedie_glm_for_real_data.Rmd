@@ -8,17 +8,11 @@ Goal: get Tweedie parameters for each fishery
 ```{r}
 library(tidyverse)
 library(mgcv)
-library(gdrive)
 ```
 
 #AK data
 ```{r}
-mvobservr_dribble <- gdrive_set_dribble(folder_id = "1xQTE9ap6GBnz4ErSrULbEqvPUtQzpHt_")
-(load(gdrive_download(
-  local_path = "1_mvglm_obs_data_segmented.Rdata", 
-  gdrive_dribble = mvobservr_dribble,
-  temp = T
-)))  #original data
+load("source_data/1_mvglm_obs_data_segmented.Rdata")  #original data
 
 model_start <- merge(sums_l, spp_exp_segmented %>% filter(segment_new == "Keep") %>%
                        select(STRATA, Species) %>% distinct()) %>%
@@ -172,17 +166,16 @@ for (i in 1:nrow(ne_strat_summary)) {
 strat_summary_comb <- ak_strat_summary %>% mutate(region="AK") %>%
   bind_rows(ne_strat_summary %>% mutate(region="NE")) 
 
-output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 output_name <- paste0("output_data/strat_summary_combined.Rdata")
 save(strat_summary_comb, file = output_name)
-# Upload to the Google Shared Drive
-gdrive_upload(output_name, output_dribble, skip_prompt = TRUE)
-
-
-#' *Load the combined dataset*
-output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
-load(gdrive_download(output_name, output_dribble))
 ```
+
+
+```{r}
+#quickload
+load("output_data/strat_summary_combined.Rdata")
+```
+
 
 ```{r}
 strat_summary_comb %>%
@@ -192,32 +185,7 @@ strat_summary_comb %>%
   facet_wrap(~name, scales="free")
 ```
 
-```{r}
-strat_summary_comb %>%
-  ggplot(aes(x=p_est, y=phi_est, col=region)) +
-  geom_point() +
-  geom_hline(yintercept = 3, linetype='dashed') +
-  geom_vline(xintercept = 1.6, linetype='dashed')
 
-
-strat_summary_comb %>%
-  ggplot(aes(x=p_est, y=mu_est, col=region)) +
-  geom_point() +
-  geom_hline(yintercept = 100, linetype='dashed') +
-  geom_vline(xintercept = 1.6, linetype='dashed')
-
-
-strat_summary_comb %>%
-  ggplot(aes(x=p_est, y=phi_est, size=mu_est, col=region)) +
-  geom_point(alpha = 0.5) +
-  geom_point(x=1.6, y=3, size=5.5, col='black', shape=21)
-```
-
-
-```{r}
-#quickload
-load("~/mvobservr-testbench/output_data/strat_summary_combined.Rdata")
-```
 
 ```{r}
 library(stringr)

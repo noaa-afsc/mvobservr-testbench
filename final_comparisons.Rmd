@@ -12,29 +12,25 @@ this is a test
 
 ```{r packages}
 library(tidyverse)
-library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
-library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
 ```
 
 ##combine datasets
 ```{r}
 
-# Set the destination folder for data outputs on the Google shared drive
-output_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
 
 #bias 25
-load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set1.Rdata", output_dribble))
+load("output_data/alltests_2spp_oe25_cov25_set1.Rdata")
 r1 <- res_comb
-load(gdrive_download("output_data/alltests_2spp_oe25_cov25_set2.Rdata", output_dribble))
+load("output_data/alltests_2spp_oe25_cov25_set2.Rdata")
 r2 <- res_comb %>% mutate(set = set + max(r1$set))
 res_comb <- bind_rows(r1, r2)
 rm(r1, r2); gc() #remove temp objects and clean up
 res_oe <- res_comb %>% mutate(effsize = 25)
 
 #bias 10
-load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set1.Rdata", output_dribble))
+load("output_data/alltests_2spp_oe10_cov25_set1.Rdata")
 r1 <- res_comb
-load(gdrive_download("output_data/alltests_2spp_oe10_cov25_set2.Rdata", output_dribble))
+load("output_data/alltests_2spp_oe10_cov25_set2.Rdata")
 r2 <- res_comb %>% mutate(set = set + max(r1$set))
 res_comb <- bind_rows(r1, r2)
 rm(r1, r2); gc() #remove temp objects and clean up
@@ -42,9 +38,9 @@ res_oe <- res_oe %>%
   bind_rows(res_comb %>% mutate(effsize = 10))
 
 #bias 40
-load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set1.Rdata", output_dribble))
+load("output_data/alltests_2spp_oe40_cov25_set1.Rdata")
 r1 <- res_comb
-load(gdrive_download("output_data/alltests_2spp_oe40_cov25_set2.Rdata", output_dribble))
+load("output_data/alltests_2spp_oe40_cov25_set2.Rdata")
 r2 <- res_comb %>% mutate(set = set + max(r1$set))
 res_comb <- bind_rows(r1, r2)
 rm(r1, r2); gc() #remove temp objects and clean up
@@ -64,87 +60,6 @@ summary(bp_mn$M)
 
 #incidence of reversed bp
 (sum(bp$rev)/nrow(bp))*100
-```
-
-##figure: relative power for mvglm and permanova vs dominance for 3 levels of bias
-```{r eval = F}
-res_oe %>%
-  mutate(
-           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
-           perma_sig = ifelse(perma_p < 0.05, 1, 0)
-    ) %>%
-  group_by(bp_level, effsize) %>%
-  summarize(across(ends_with("sig"), ~mean(.x, na.rm=TRUE)), .groups="drop") %>%
-  ggplot(aes(x=bp_level, y=mvglm_sig/perma_sig, col=factor(effsize), group=effsize)) +
-  geom_line() +
-  theme_bw() +
-  labs(x="% dominance by species 1",
-       y="relative power (mvglm/permanova)",
-       title = "relative power of tests on total biomass",
-       subtitle = "25% coverage; 10, 25, or 40% reduction on catch of species 2 when observed",
-       col="observer effect size"
-  ) +
-  scale_x_continuous(labels=scales::label_percent())
-```
-
-
-
-##figure: power of 3 tests vs bias w/ bootstrap error ribbons faceted by dominance
-```{r, eval = F, fig.width=8}
-bootstrap_size = 100
-n_bootstraps = 500
-
-res_oe %>%
-  mutate(t_test_sig = ifelse(tp < 0.05, 1, 0),
-           f_test_sig = ifelse(Fp < 0.05, 1, 0),
-           glm_mgcv_sig = ifelse(glm_mgcv_p <= 0.05, 1, 0), 
-           KS_test_sig = ifelse(KSp < 0.05, 1, 0),
-           median_test_sig = ifelse(ci_lo > 0 | ci_hi < 0, 1, 0),
-           mvglm_sig = ifelse(mvglm_p < 0.05, 1, 0),
-           gllvm_sig = ifelse(p_gllvm < 0.05, 1, 0),
-           perma_sig = ifelse(perma_p < 0.05, 1, 0),
-           glmm_sig = ifelse(p_glmm < 0.05, 1, 0)
-    ) %>%
-  select(effsize, bp_level, ends_with("sig")) %>%
-  mutate(bin = as.factor(as.numeric(bp_level))) %>%
-  split(~bin + effsize) %>%
-  map(.x=., ~{
-      slice_sample(.x, n=bootstrap_size*n_bootstraps, replace=TRUE) %>%
-      mutate(boot = rep(1:n_bootstraps, each=bootstrap_size)) %>%
-      group_by(bin, effsize, boot) %>%
-      summarize(across(ends_with("sig"), function(x) mean(x, na.rm=TRUE)), 
-                .groups="drop")
-    }) %>%
-  list_rbind() %>%
-  pivot_longer(cols = ends_with("sig"), names_to = "test", values_to = "pctsig") %>%
-  mutate(test = factor(test, levels = c("t_test_sig", "f_test_sig", "glm_mgcv_sig","KS_test_sig",
-                                        "median_test_sig","mvglm_sig", "perma_sig", "glmm_sig", "gllvm_sig"),
-                       ordered = TRUE,
-                       labels = c("t-test", "F test", "uni. GLM", "K-S test", 
-                                  "med. diff.", "mvobservr", "permanova", "glmm", "gllvm"))) %>%
-  group_by(bin, effsize, test) %>%
-  summarize(meansig = mean(pctsig), lo = quantile(pctsig,0.025), hi = quantile(pctsig, 0.975), .groups="drop") %>%
-  filter(test %in% c('MV GLM','permanova','uni. GLM')) %>%
-  #mutate(bp_level = paste0("BP: ", as.numeric(as.character(bin))*100, "%")) %>%
-  mutate(bp_level = as.numeric(as.character(bin))) %>%
-  ggplot(aes(x=bp_level, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
-  #ggplot(aes(x=effsize/100, y=meansig, ymin=lo, ymax=hi, col=test, fill=test, group=test)) +
-  geom_line(linewidth = 1) +
-  geom_point() +
-  geom_ribbon(alpha = 0.2) +
-  scale_color_brewer(palette = 'Set1') +
-  scale_fill_brewer(palette = 'Set1') +
-  theme_bw() +
-  labs(#x="% dominance by species 1",
-      x = "observer effect size",
-       y="% of simulations with positive (significant) result",
-       title = "power of tests on total biomass",
-       subtitle = "25% coverage; 10, 25, or 40% reduction on catch of species 2 when observed \n 200 reps per data point"
-  ) +
-  scale_x_continuous(labels=scales::label_percent()) +
-  scale_y_continuous(labels=scales::label_percent(), limits=c(0,1)) +
-  facet_wrap(~effsize)
-  #facet_wrap(~bp_level)
 ```
 
 ##figure: power of all tests for 3 bias levels

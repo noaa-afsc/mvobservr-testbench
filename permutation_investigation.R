@@ -3,16 +3,12 @@ library(furrr)
 library(purrr)
 library(tidyr)
 library(ggplot2)
-library(gdrive)       # devtools::install_github("noaa-afsc/gdrive")
 library(mvobservr)    # devtools::install_github("noaa-afsc/mvobservr")
 library(tweedie)
 library(progressr)
 
-mvobservr_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
-
 set.seed(123) 
 
-set_skip_prompt <- T
 
 #setup parameters
 bias <- c(0, -0.25) #-0.25, -0.10, -0.40
@@ -122,12 +118,8 @@ pvals_by_perm <- map(perm_levels_shuffled, ~{# Feed the shuffled vector into map
 #save data to gdrive
 save(pvals_by_perm, file="output_data/SUPPL_pvals_by_perm.Rdat")
 
-gdrive_upload(local_path = "output_data/SUPPL_pvals_by_perm.Rdat",
-              gdrive_dribble = mvobservr_dribble,
-              skip_prompt = set_skip_prompt)
-
 # # Quick load and plot -----------------------------------------------------
- load(gdrive_download(local_path = "output_data/SUPPL_pvals_by_perm.Rdat", gdrive_dribble = mvobservr_dribble))
+ load("output_data/SUPPL_pvals_by_perm.Rdat")
 
 suppl_fig_pval <-
   pvals_by_perm  %>%
@@ -147,6 +139,3 @@ suppl_fig_pval
 
 save(pvals_by_perm, suppl_fig_pval, file="output_data/SUPPL_pvals_by_perm.Rdat")
 
-gdrive_upload(local_path = "output_data/SUPPL_pvals_by_perm.Rdat", 
-              gdrive_dribble = mvobservr_dribble, 
-              skip_prompt = set_skip_prompt)

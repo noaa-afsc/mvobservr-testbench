@@ -2,30 +2,25 @@
 # loads data previously run from false_positive_test.r
 library(tidyverse)
 library(broom)
-library(gdrive)
 library(flextable)
 library(officer)
 library(ggbreak) 
 
-mvobservr_dribble <- gdrive_set_dribble(folder_id = "1Wh-ZQlJ3AIVaQZTWk4QNuyiMfoVECQgt")
-
-#list all files in google drive folder that match your naming pattern
-# The 'pattern' argument acts as a search filter
-drive_files <- gdrive_ls(mvobservr_dribble)
-drive_files <- drive_files %>% filter(grepl(pattern = "^alltests_falsepos_set_", x = name))
-
-file_names <- drive_files$name
+#list all files in folder that match your naming pattern
+# Define the local directory and list matching files
+local_dir <- "output_data"
+file_names <- list.files(path = local_dir, pattern = "^alltests_falsepos_set_")
 
 # Initialize our empty master dataframe
 res_comb_tbl <- tibble()
 
 # 4. Loop over the EXACT file names we just pulled from the cloud
 for(current_name in file_names) {
-  # Reconstruct the path exactly how your gdrive_download function expects it
-  current_file <- paste0("output_data/", current_name)
+  # Reconstruct the path  
+  current_file <- file.path(local_dir, current_name)
   cat("Downloading and processing:", current_file, "\n")
   tryCatch({
-    load(gdrive_download(local_path = current_file, gdrive_dribble = mvobservr_dribble))
+    load(current_file)
     if(nrow(res_comb_tbl) == 0) {
       # For the very first file, assign it and add a tracking column
       res_comb_tbl <- res_comb |> 
@@ -42,10 +37,6 @@ for(current_name in file_names) {
     message("--> Skipped ", current_file, " (Error: ", e$message, ")")
   })
 }
-
-#So we have an extra copy here for set1_3k.  Remove it.
-Set1_3k <- res_comb_tbl |> filter(source_file == "alltests_falsepos_set_Set1_3k.Rdata")
-res_comb_tbl <- res_comb_tbl |> filter(source_file != "alltests_falsepos_set_Set1_3k.Rdata")
 
 ## figure: boxplot for false positives ----
 res_fp <- res_comb_tbl %>%
